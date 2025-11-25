@@ -79,4 +79,32 @@ class VideoOutputConfigurationTest {
             // Note: This might be the same on some systems, so we just log it
         }
     }
+    
+    @Test
+    fun `macOS should use caopengllayer for embedded playback`() {
+        val os = VideoOutputConfiguration.detectOperatingSystem()
+        
+        if (os == VideoOutputConfiguration.OperatingSystem.MACOS) {
+            val options = VideoOutputConfiguration.getPlatformVideoOptions()
+            
+            // macOS should use caopengllayer for embedded scenarios
+            val hasCAOpenGLLayer = options.any { it.contains("vout=caopengllayer") }
+            assertTrue(hasCAOpenGLLayer, "macOS should use caopengllayer for embedded playback")
+            
+            println("✓ macOS correctly configured with caopengllayer")
+        } else {
+            println("ℹ Skipping macOS-specific test (current OS: $os)")
+        }
+    }
+    
+    @Test
+    fun `fallback options should use OpenGL on all platforms`() {
+        val fallbackOptions = VideoOutputConfiguration.getFallbackVideoOptions()
+        
+        // Fallback should always use OpenGL for maximum compatibility
+        val hasOpenGL = fallbackOptions.any { it.contains("vout=opengl") }
+        assertTrue(hasOpenGL, "Fallback should use OpenGL for maximum compatibility")
+        
+        println("✓ Fallback correctly configured with OpenGL")
+    }
 }

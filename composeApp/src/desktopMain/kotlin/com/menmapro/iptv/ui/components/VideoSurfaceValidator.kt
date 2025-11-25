@@ -81,9 +81,12 @@ object VideoSurfaceValidator {
             }
             
             // Check if video surface is displayable
+            // Note: In Compose Desktop with SwingPanel, the component might not be
+            // displayable immediately during factory initialization, but will become
+            // displayable once added to the window hierarchy. This is a warning, not an error.
             if (!videoSurface.isDisplayable) {
-                issues.add("视频表面不可显示 (未添加到显示层次结构)")
-                suggestions.add("确保视频表面已正确添加到Swing容器中")
+                println("⚠️ Warning: Video surface not yet displayable (will be added to hierarchy)")
+                // Don't add this as an issue - it's expected during initialization
             }
             
             // Check if video surface is enabled

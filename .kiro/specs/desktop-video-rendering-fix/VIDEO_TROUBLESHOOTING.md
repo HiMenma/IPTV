@@ -2,6 +2,14 @@
 
 本指南帮助您诊断和解决 Desktop 版本 IPTV 播放器的视频播放问题。
 
+## 最新更新
+
+**2025-11-26：生命周期修复**
+- ✅ 修复了协程取消导致的错误：`The coroutine scope left the composition`
+- ✅ 修复了视频表面初始化问题（尺寸 0x0）
+- ✅ 改进了 SwingPanel 的 factory 初始化逻辑
+- 详见：[LIFECYCLE_FIX.md](./LIFECYCLE_FIX.md) 和 [QUICK_TEST_LIFECYCLE_FIX.md](./QUICK_TEST_LIFECYCLE_FIX.md)
+
 ## 目录
 
 1. [常见问题](#常见问题)
@@ -12,7 +20,35 @@
 
 ## 常见问题
 
-### 问题 1: 黑屏但有声音
+### 问题 0: 协程取消错误（已修复）
+
+**症状**: 看到错误消息 `The coroutine scope left the composition`
+
+**状态**: ✅ 已在 2025-11-26 修复
+
+**原因**: 
+- URL 快速切换导致协程被取消
+- 视频表面初始化时机问题
+
+**解决方案**:
+- 更新到最新版本即可
+- 详见 [LIFECYCLE_FIX.md](./LIFECYCLE_FIX.md)
+
+### 问题 1: 视频表面尺寸无效（已修复）
+
+**症状**: 日志显示 `视频表面尺寸无效: 0x0`
+
+**状态**: ✅ 已在 2025-11-26 修复
+
+**原因**:
+- SwingPanel 的 factory 没有正确初始化视频表面
+- 视频表面可见性未设置
+
+**解决方案**:
+- 更新到最新版本即可
+- 现在会在 factory 中自动设置初始尺寸为 800x600
+
+### 问题 2: 黑屏但有声音
 
 **症状**: 播放视频时只能听到声音,但屏幕显示黑色。
 

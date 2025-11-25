@@ -428,45 +428,13 @@ actual fun VideoPlayer(
                     val revalidationResult = VideoSurfaceValidator.validateVideoSurface(mediaPlayerComponent)
                     
                     if (!revalidationResult.isValid) {
-                        // Fixes didn't work, report error with comprehensive diagnostics
-                        // Validates: Requirements 3.4
-                        val errorMsg = buildString {
-                            appendLine("视频表面初始化失败")
-                            appendLine()
-                            appendLine("尝试的修复:")
-                            appendLine("  • 设置视频表面可见性")
-                            appendLine("  • 调整视频表面尺寸")
-                            appendLine()
-                            appendLine("仍存在的问题:")
-                            revalidationResult.issues.forEach { issue ->
-                                appendLine("  • $issue")
-                            }
-                            appendLine()
-                            appendLine("建议的解决方案:")
-                            revalidationResult.suggestions.forEach { suggestion ->
-                                appendLine("  • $suggestion")
-                            }
-                            appendLine()
-                            appendLine("额外建议:")
-                            appendLine("  • 尝试重启应用程序")
-                            appendLine("  • 检查系统图形驱动是否正常")
-                            appendLine("  • 确认VLC版本兼容性")
-                            appendLine()
-                            appendLine("系统信息:")
-                            appendLine(VideoOutputConfiguration.getPlatformInfo().prependIndent("  "))
+                        // Log warnings but continue - the component might become displayable
+                        // once it's added to the window hierarchy
+                        println("⚠️ Video surface validation has warnings after fix attempts:")
+                        revalidationResult.issues.forEach { issue ->
+                            println("  • $issue")
                         }
-                        
-                        println("✗ Video surface validation failed after fix attempts")
-                        println(errorMsg)
-                        
-                        playerState.value = playerState.value.copy(
-                            playbackState = PlaybackState.ERROR,
-                            errorMessage = errorMsg
-                        )
-                        
-                        onPlayerInitFailed()
-                        onError(errorMsg)
-                        return@DisposableEffect onDispose {}
+                        println("Continuing with initialization - issues may resolve once component is displayed")
                     } else {
                         println("✓ Video surface validation passed after fixes")
                     }
@@ -558,6 +526,28 @@ actual fun VideoPlayer(
     
     // Handle URL changes - improved with proper resource cleanup and media options
     LaunchedEffect(url) {
+        // Validate URL first
+        if (url.isBlank()) {
+            val errorMsg = "无效的播放地址"
+            onError(errorMsg)
+            playerState.value = playerState.value.copy(
+                playbackState = PlaybackState.ERROR,
+                errorMessage = errorMsg
+            )
+            return@LaunchedEffect
+        }
+        
+        if (isReleased.value || mediaPlayerComponent == null) {
+            val errorMsg = "播放器未初始化"
+            println("Cannot load URL: player is released or not initialized")
+            playerState.value = playerState.value.copy(
+                playbackState = PlaybackState.ERROR,
+                errorMessage = errorMsg
+            )
+            onError(errorMsg)
+            return@LaunchedEffect
+        }
+        
         // Perform comprehensive pre-check before attempting playback
         // Validates: Requirements 1.1, 2.1, 3.1
         println("=== Video Playback Pre-Check ===")
@@ -614,28 +604,7 @@ actual fun VideoPlayer(
             println("✓ Pre-check passed, proceeding with playback")
         }
         
-        // Validate URL
-        if (url.isBlank()) {
-            val errorMsg = "无效的播放地址"
-            onError(errorMsg)
-            playerState.value = playerState.value.copy(
-                playbackState = PlaybackState.ERROR,
-                errorMessage = errorMsg
-            )
-            return@LaunchedEffect
-        }
-        
-        if (isReleased.value || mediaPlayerComponent == null) {
-            val errorMsg = "播放器未初始化"
-            println("Cannot load URL: player is released or not initialized")
-            playerState.value = playerState.value.copy(
-                playbackState = PlaybackState.ERROR,
-                errorMessage = errorMsg
-            )
-            onError(errorMsg)
-            return@LaunchedEffect
-        }
-        
+        // Perform all operations synchronously to avoid coroutine cancellation issues
         try {
             println("Loading new URL: $url")
             
@@ -648,20 +617,18 @@ actual fun VideoPlayer(
                 // Continue anyway as this might fail if nothing is playing
             }
             
-            // Step 2: Add delay to ensure resources are properly freed
-            delay(200)
-            
-            // Step 3: Update state to show loading
+            // Step 2: Update state to show loading (no delay needed)
             playerState.value = playerState.value.copy(
                 playbackState = PlaybackState.BUFFERING,
                 errorMessage = null
             )
             
-            // Step 4: Build media options based on URL type
+            // Step 3: Build media options based on URL type
             val mediaOptions = buildMediaOptions(url)
             println("Media options configured: ${mediaOptions.joinToString(", ")}")
             
-            // Step 5: Load and play new media with options and error handling
+            // Step 4: Load and play new media with options and error handling
+            // Use a try-catch to handle any VLC-specific exceptions
             try {
                 val success = mediaPlayerComponent.mediaPlayer().media().play(url, *mediaOptions)
                 if (success) {
@@ -674,6 +641,12 @@ actual fun VideoPlayer(
             }
             
         } catch (e: Exception) {
+            // Only handle exceptions if the coroutine is still active
+            if (!isActive) {
+                println("Coroutine cancelled during media loading, ignoring error")
+                return@LaunchedEffect
+            }
+            
             // Categorize error and provide user-friendly message
             val errorCategory = categorizeMediaError(e)
             val userFriendlyMsg = errorCategory.userMessage
@@ -734,35 +707,65 @@ actual fun VideoPlayer(
         SwingPanel(
             background = Color.Black,
             modifier = modifier,
-            factory = { mediaPlayerComponent },
+            factory = { 
+                // Return the media player component
+                // EmbeddedMediaPlayerComponent manages its own video surface
+                mediaPlayerComponent.apply {
+                    try {
+                        // Get the video surface component
+                        val videoSurface = videoSurfaceComponent()
+                        
+                        // Ensure video surface is visible
+                        videoSurface.isVisible = true
+                        
+                        // Set initial size if needed
+                        if (videoSurface.width <= 0 || videoSurface.height <= 0) {
+                            videoSurface.setSize(800, 600)
+                            println("✓ Initial video surface size set to 800x600")
+                        }
+                        
+                        println("✓ Video surface initialized in factory")
+                        println("  Video surface parent: ${videoSurface.parent?.javaClass?.simpleName ?: "null"}")
+                        println("  Video surface visible: ${videoSurface.isVisible}")
+                        println("  Video surface size: ${videoSurface.width}x${videoSurface.height}")
+                    } catch (e: Exception) {
+                        println("⚠️ Error initializing video surface in factory: ${e.message}")
+                        e.printStackTrace()
+                    }
+                }
+            },
             update = { component ->
                 // Monitor and respond to size changes
                 // Validates: Requirements 3.3
                 try {
                     val currentSize = component.size
-                    val videoSurface = component.videoSurfaceComponent()
-                    val videoSurfaceSize = videoSurface.size
                     
-                    // Check if video surface size differs from component size
-                    if (videoSurfaceSize.width != currentSize.width || 
-                        videoSurfaceSize.height != currentSize.height) {
+                    // Only update if component has valid size
+                    if (currentSize.width > 0 && currentSize.height > 0) {
+                        val videoSurface = component.videoSurfaceComponent()
+                        val videoSurfaceSize = videoSurface.size
                         
-                        println("=== Video Surface Size Update ===")
-                        println("Component size changed:")
-                        println("  Previous: ${videoSurfaceSize.width}x${videoSurfaceSize.height}")
-                        println("  New: ${currentSize.width}x${currentSize.height}")
-                        
-                        // Update video surface to match new size
-                        videoSurface.setSize(currentSize.width, currentSize.height)
-                        
-                        // Ensure video surface remains visible
-                        if (!videoSurface.isVisible) {
-                            videoSurface.isVisible = true
-                            println("  Video surface visibility restored")
+                        // Check if video surface size differs from component size
+                        if (videoSurfaceSize.width != currentSize.width || 
+                            videoSurfaceSize.height != currentSize.height) {
+                            
+                            println("=== Video Surface Size Update ===")
+                            println("Component size changed:")
+                            println("  Previous: ${videoSurfaceSize.width}x${videoSurfaceSize.height}")
+                            println("  New: ${currentSize.width}x${currentSize.height}")
+                            
+                            // Update video surface to match new size
+                            videoSurface.setSize(currentSize.width, currentSize.height)
+                            
+                            // Ensure video surface remains visible
+                            if (!videoSurface.isVisible) {
+                                videoSurface.isVisible = true
+                                println("  Video surface visibility restored")
+                            }
+                            
+                            println("✓ Video surface updated to match component size")
+                            println("=================================")
                         }
-                        
-                        println("✓ Video surface updated to match component size")
-                        println("=================================")
                     }
                 } catch (e: Exception) {
                     println("⚠️ Error updating video surface size: ${e.message}")

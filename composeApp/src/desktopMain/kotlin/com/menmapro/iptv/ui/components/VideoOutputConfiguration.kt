@@ -47,9 +47,13 @@ object VideoOutputConfiguration {
         
         return when (os) {
             OperatingSystem.MACOS -> arrayOf(
-                "--vout=macosx",
+                // Use caopengllayer for embedded playback on macOS
+                // This is more reliable than macosx vout for embedded scenarios
+                "--vout=caopengllayer",
                 "--no-video-title-show",
-                "--no-osd"
+                "--no-osd",
+                // Disable screen saver
+                "--no-disable-screensaver"
             )
             
             OperatingSystem.LINUX -> arrayOf(
@@ -80,11 +84,21 @@ object VideoOutputConfiguration {
      * @return VLC命令行参数数组
      */
     fun getFallbackVideoOptions(): Array<String> {
-        return arrayOf(
-            "--vout=opengl",
-            "--no-video-title-show",
-            "--no-osd"
-        )
+        val os = detectOperatingSystem()
+        
+        return when (os) {
+            OperatingSystem.MACOS -> arrayOf(
+                // Fallback to OpenGL for macOS
+                "--vout=opengl",
+                "--no-video-title-show",
+                "--no-osd"
+            )
+            else -> arrayOf(
+                "--vout=opengl",
+                "--no-video-title-show",
+                "--no-osd"
+            )
+        }
     }
     
     /**
