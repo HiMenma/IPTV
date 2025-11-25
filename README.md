@@ -117,13 +117,97 @@ cd /Users/menmapro/Documents/GitHub/IPTV
 2. 在频道列表中选择要播放的频道
 3. 视频将自动开始播放
 
+## 视频渲染改进 (Desktop)
+
+Desktop 版本已经过全面优化,解决了视频渲染黑屏问题,并提供了更好的播放体验:
+
+### 主要改进
+
+- ✅ **平台特定视频输出**: 自动检测操作系统并使用最佳视频输出模块
+- ✅ **硬件加速**: 自动启用硬件加速以提高性能和降低 CPU 使用率
+- ✅ **智能备用机制**: 如果主要视频输出失败,自动尝试备用输出方法
+- ✅ **视频表面验证**: 确保视频渲染表面正确初始化和配置
+- ✅ **直播流优化**: 针对直播流的低延迟缓存配置
+- ✅ **格式自适应**: 根据视频格式自动调整解码选项
+- ✅ **详细诊断**: 提供详细的播放诊断信息,便于问题排查
+
+### 支持的视频格式和协议
+
+**视频编解码器**:
+- H.264 (AVC) - 推荐,硬件加速支持
+- H.265 (HEVC) - 推荐,硬件加速支持
+- VP8/VP9 - WebM 格式
+- MPEG-2/MPEG-4
+- 其他 VLC 支持的编解码器
+
+**流媒体协议**:
+- HTTP/HTTPS - 标准 HTTP 流
+- HLS (HTTP Live Streaming) - .m3u8 播放列表
+- RTSP (Real Time Streaming Protocol)
+- RTMP (Real Time Messaging Protocol)
+- UDP/RTP - 组播流
+
+**容器格式**:
+- MP4, MKV, AVI, MOV
+- TS (MPEG Transport Stream)
+- WebM
+- FLV
+
+### VLC 配置建议
+
+Desktop 版本需要系统安装 VLC Media Player:
+
+**macOS**:
+```bash
+brew install --cask vlc
+```
+
+**Linux (Ubuntu/Debian)**:
+```bash
+sudo apt-get update
+sudo apt-get install vlc
+```
+
+**Windows**:
+从 [VLC 官网](https://www.videolan.org/vlc/) 下载安装
+
+**推荐 VLC 版本**: 3.0.18 或更高版本
+
+### 文档资源
+
+完整的视频渲染文档:
+
+- **[快速入门指南](.kiro/specs/desktop-video-rendering-fix/QUICK_START_GUIDE.md)** - 新用户快速开始
+- **[故障排除指南](.kiro/specs/desktop-video-rendering-fix/VIDEO_TROUBLESHOOTING.md)** - 常见问题解决方案
+- **[VLC 配置指南](.kiro/specs/desktop-video-rendering-fix/VLC_CONFIGURATION_GUIDE.md)** - VLC 安装和配置详解
+- **[技术文档](.kiro/specs/desktop-video-rendering-fix/TECHNICAL_DOCUMENTATION.md)** - 开发者技术参考
+
+### 故障排除
+
+详细的故障排除指南请参阅: [VIDEO_TROUBLESHOOTING.md](.kiro/specs/desktop-video-rendering-fix/VIDEO_TROUBLESHOOTING.md)
+
+常见问题快速解决:
+
+1. **黑屏但有声音**
+   - 确保已安装 VLC Media Player
+   - 检查系统是否支持硬件加速
+   - 查看应用日志中的诊断信息
+
+2. **视频卡顿或延迟**
+   - 检查网络连接
+   - 尝试降低视频质量
+   - 查看 CPU 使用率
+
+3. **无法播放某些格式**
+   - 确认 VLC 版本是否支持该格式
+   - 查看错误日志获取详细信息
+
 ## 已知问题
 
 ### Desktop 版本
 
-- **VLC 依赖**: Desktop 版本需要系统安装 VLC Media Player
-  - macOS: `brew install --cask vlc`
-  - Windows: 从 [VLC 官网](https://www.videolan.org/vlc/) 下载安装
+- **VLC 依赖**: Desktop 版本需要系统安装 VLC Media Player (见上方安装说明)
+- **首次播放延迟**: 首次播放可能需要几秒钟初始化视频输出
 
 ### 弃用警告
 
