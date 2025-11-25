@@ -1,0 +1,105 @@
+-- Playlist table
+CREATE TABLE IF NOT EXISTS Playlist (
+    id TEXT PRIMARY KEY NOT NULL,
+    name TEXT NOT NULL,
+    url TEXT,
+    type TEXT NOT NULL,
+    createdAt INTEGER NOT NULL,
+    updatedAt INTEGER NOT NULL
+);
+
+-- Channel table
+CREATE TABLE IF NOT EXISTS Channel (
+    id TEXT PRIMARY KEY NOT NULL,
+    playlistId TEXT NOT NULL,
+    name TEXT NOT NULL,
+    url TEXT NOT NULL,
+    logoUrl TEXT,
+    groupName TEXT,
+    tvgId TEXT,
+    tvgName TEXT,
+    epgChannelId TEXT,
+    FOREIGN KEY (playlistId) REFERENCES Playlist(id) ON DELETE CASCADE
+);
+
+-- Favorite table
+CREATE TABLE IF NOT EXISTS Favorite (
+    channelId TEXT PRIMARY KEY NOT NULL,
+    addedAt INTEGER NOT NULL,
+    FOREIGN KEY (channelId) REFERENCES Channel(id) ON DELETE CASCADE
+);
+
+-- EPG Program table
+CREATE TABLE IF NOT EXISTS EpgProgram (
+    id TEXT PRIMARY KEY NOT NULL,
+    channelId TEXT NOT NULL,
+    title TEXT NOT NULL,
+    description TEXT,
+    startTime INTEGER NOT NULL,
+    endTime INTEGER NOT NULL,
+    FOREIGN KEY (channelId) REFERENCES Channel(id) ON DELETE CASCADE
+);
+
+-- Queries for Playlist
+selectAllPlaylists:
+SELECT * FROM Playlist ORDER BY updatedAt DESC;
+
+selectPlaylistById:
+SELECT * FROM Playlist WHERE id = ?;
+
+insertPlaylist:
+INSERT OR REPLACE INTO Playlist(id, name, url, type, createdAt, updatedAt)
+VALUES (?, ?, ?, ?, ?, ?);
+
+deletePlaylist:
+DELETE FROM Playlist WHERE id = ?;
+
+-- Queries for Channel
+selectChannelsByPlaylistId:
+SELECT * FROM Channel WHERE playlistId = ? ORDER BY name ASC;
+
+selectChannelById:
+SELECT * FROM Channel WHERE id = ?;
+
+insertChannel:
+INSERT OR REPLACE INTO Channel(id, playlistId, name, url, logoUrl, groupName, tvgId, tvgName, epgChannelId)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);
+
+deleteChannelsByPlaylistId:
+DELETE FROM Channel WHERE playlistId = ?;
+
+-- Queries for Favorite
+selectAllFavorites:
+SELECT Channel.* FROM Channel 
+INNER JOIN Favorite ON Channel.id = Favorite.channelId 
+ORDER BY Favorite.addedAt DESC;
+
+isFavorite:
+SELECT COUNT(*) > 0 FROM Favorite WHERE channelId = ?;
+
+insertFavorite:
+INSERT OR IGNORE INTO Favorite(channelId, addedAt) VALUES (?, ?);
+
+deleteFavorite:
+DELETE FROM Favorite WHERE channelId = ?;
+
+-- Queries for EPG
+selectEpgByChannelId:
+SELECT * FROM EpgProgram 
+WHERE channelId = ? AND endTime > ?
+ORDER BY startTime ASC;
+
+selectCurrentProgram:
+SELECT * FROM EpgProgram 
+WHERE channelId = ? AND startTime <= ? AND endTime > ?
+LIMIT 1;
+
+insertEpgProgram:
+INSERT OR REPLACE INTO EpgProgram(id, channelId, title, description, startTime, endTime)
+VALUES (?, ?, ?, ?, ?, ?);
+
+deleteOldEpgPrograms:
+DELETE FROM EpgProgram WHERE endTime < ?;
+
+deleteEpgByChannelId:
+DELETE FROM EpgProgram WHERE channelId = ?;
