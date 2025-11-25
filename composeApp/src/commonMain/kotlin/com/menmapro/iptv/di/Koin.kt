@@ -12,9 +12,12 @@ import com.menmapro.iptv.data.repository.PlaylistRepository
 import com.menmapro.iptv.ui.screens.FavoriteScreenModel
 import com.menmapro.iptv.ui.screens.PlaylistScreenModel
 import io.ktor.client.HttpClient
+import io.ktor.client.plugins.HttpTimeout
 import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
 import io.ktor.serialization.kotlinx.json.json
 import kotlinx.serialization.json.Json
+import org.koin.core.KoinApplication
+import org.koin.core.context.GlobalContext
 import org.koin.core.context.startKoin
 import org.koin.dsl.module
 
@@ -28,6 +31,11 @@ val appModule = module {
                     prettyPrint = true
                     isLenient = true
                 })
+            }
+            install(HttpTimeout) {
+                requestTimeoutMillis = 30000 // 30 seconds
+                connectTimeoutMillis = 15000 // 15 seconds
+                socketTimeoutMillis = 30000 // 30 seconds
             }
         }
     }
@@ -56,8 +64,22 @@ val appModule = module {
     factory { FavoriteScreenModel(get()) }
 }
 
-fun initKoin() {
+fun initKoin(appDeclaration: KoinApplication.() -> Unit = {}) {
+    // Check if Koin is already initialized to prevent duplicate initialization
+    if (GlobalContext.getOrNull() != null) {
+        println("Koin is already initialized, skipping re-initialization")
+        return
+    }
+    
     startKoin {
+        appDeclaration()
         modules(appModule)
     }
+}
+
+/**
+ * Check if Koin has been initialized
+ */
+fun isKoinInitialized(): Boolean {
+    return GlobalContext.getOrNull() != null
 }
