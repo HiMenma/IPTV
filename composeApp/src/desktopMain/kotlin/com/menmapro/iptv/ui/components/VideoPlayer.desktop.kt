@@ -24,7 +24,9 @@ actual fun VideoPlayer(
     url: String,
     modifier: Modifier,
     playerState: MutableState<PlayerState>,
-    onPlayerControls: (PlayerControls) -> Unit
+    onPlayerControls: (PlayerControls) -> Unit,
+    onError: (String) -> Unit,
+    onPlayerInitFailed: () -> Unit
 ) {
     // Check VLC availability first
     val vlcAvailable = remember { VlcAvailabilityChecker.isVlcAvailable() }
@@ -33,12 +35,15 @@ actual fun VideoPlayer(
     if (!vlcAvailable) {
         VlcNotAvailableMessage(modifier)
         
-        // Update player state to show error
+        // Update player state to show error and call callback
         LaunchedEffect(Unit) {
+            val errorMsg = "VLC Media Player 未安装"
             playerState.value = playerState.value.copy(
                 playbackState = PlaybackState.ERROR,
-                errorMessage = "VLC Media Player 未安装"
+                errorMessage = errorMsg
             )
+            onPlayerInitFailed()
+            onError(errorMsg)
         }
         
         return
@@ -55,8 +60,12 @@ actual fun VideoPlayer(
         try {
             EmbeddedMediaPlayerComponent()
         } catch (e: Exception) {
-            println("Error initializing VLC player: ${e.message}")
+            val errorMsg = "Error initializing VLC player: ${e.message}"
+            println(errorMsg)
             e.printStackTrace()
+            // Notify about initialization failure
+            onPlayerInitFailed()
+            onError(errorMsg)
             null
         }
     }
@@ -108,10 +117,12 @@ actual fun VideoPlayer(
             
             override fun error(mediaPlayer: MediaPlayer) {
                 try {
+                    val errorMsg = "播放错误"
                     playerState.value = playerState.value.copy(
                         playbackState = PlaybackState.ERROR,
-                        errorMessage = "播放错误"
+                        errorMessage = errorMsg
                     )
+                    onError(errorMsg)
                 } catch (e: Exception) {
                     println("Error in error event: ${e.message}")
                 }
@@ -221,6 +232,17 @@ actual fun VideoPlayer(
     }
     
     DisposableEffect(mediaPlayerComponent) {
+        // Validate URL before proceeding
+        if (url.isBlank()) {
+            val errorMsg = "无效的播放地址"
+            onError(errorMsg)
+            playerState.value = playerState.value.copy(
+                playbackState = PlaybackState.ERROR,
+                errorMessage = errorMsg
+            )
+            return@DisposableEffect onDispose {}
+        }
+        
         if (mediaPlayerComponent != null) {
             try {
                 // Setup event listener and track registration
@@ -229,10 +251,16 @@ actual fun VideoPlayer(
                 println("Event listener registered successfully")
                 onPlayerControls(controls)
             } catch (e: Exception) {
-                println("Error setting up media player: ${e.message}")
+                val errorMsg = "Error setting up media player: ${e.message}"
+                println(errorMsg)
                 e.printStackTrace()
                 listenerRegistered.value = false
+                onPlayerInitFailed()
+                onError(errorMsg)
             }
+        } else {
+            // mediaPlayerComponent is null, initialization failed
+            onPlayerInitFailed()
         }
         
         onDispose {
@@ -265,12 +293,25 @@ actual fun VideoPlayer(
     
     // Handle URL changes - improved with proper resource cleanup
     LaunchedEffect(url) {
+        // Validate URL
+        if (url.isBlank()) {
+            val errorMsg = "无效的播放地址"
+            onError(errorMsg)
+            playerState.value = playerState.value.copy(
+                playbackState = PlaybackState.ERROR,
+                errorMessage = errorMsg
+            )
+            return@LaunchedEffect
+        }
+        
         if (isReleased.value || mediaPlayerComponent == null) {
+            val errorMsg = "播放器未初始化"
             println("Cannot load URL: player is released or not initialized")
             playerState.value = playerState.value.copy(
                 playbackState = PlaybackState.ERROR,
-                errorMessage = "播放器未初始化"
+                errorMessage = errorMsg
             )
+            onError(errorMsg)
             return@LaunchedEffect
         }
         
@@ -324,6 +365,7 @@ actual fun VideoPlayer(
                 playbackState = PlaybackState.ERROR,
                 errorMessage = errorMsg
             )
+            onError(errorMsg)
         }
     }
 

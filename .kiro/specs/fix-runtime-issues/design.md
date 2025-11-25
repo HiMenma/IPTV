@@ -383,3 +383,221 @@ if (!vlcAvailable) {
 - 记录堆栈跟踪
 - 收集设备信息
 - 提供用户反馈渠道
+
+
+## Android ExoPlayer流媒体支持
+
+### 问题分析
+
+ExoPlayer错误 "No suitable media source factory found for content type: 22" 表示缺少对特定流媒体格式的支持。Content type 22 通常对应 HLS (HTTP Live Streaming) 或其他自适应流媒体格式。
+
+### 解决方案
+
+需要添加ExoPlayer的额外依赖来支持各种流媒体格式：
+
+```kotlin
+// build.gradle.kts - androidMain dependencies
+implementation("androidx.media3:media3-exoplayer-hls:1.3.1")
+implementation("androidx.media3:media3-exoplayer-dash:1.3.1")
+implementation("androidx.media3:media3-exoplayer-smoothstreaming:1.3.1")
+```
+
+这些库提供：
+- **media3-exoplayer-hls**: HLS (HTTP Live Streaming) 支持
+- **media3-exoplayer-dash**: DASH (Dynamic Adaptive Streaming over HTTP) 支持
+- **media3-exoplayer-smoothstreaming**: Microsoft Smooth Streaming 支持
+
+### 实现细节
+
+ExoPlayer会自动检测这些库并注册相应的MediaSource工厂。不需要修改VideoPlayer代码，只需添加依赖即可。
+
+### 错误消息改进
+
+在VideoPlayer.android.kt中改进错误处理，将技术错误代码转换为用户友好的消息：
+
+```kotlin
+override fun onPlayerError(error: PlaybackException) {
+    val errorMsg = when (error.errorCode) {
+        PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_FAILED -> "网络连接失败"
+        PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_TIMEOUT -> "网络连接超时"
+        PlaybackException.ERROR_CODE_IO_BAD_HTTP_STATUS -> "HTTP错误: ${error.message}"
+        PlaybackException.ERROR_CODE_PARSING_CONTAINER_MALFORMED -> "媒体格式错误"
+        PlaybackException.ERROR_CODE_PARSING_MANIFEST_MALFORMED -> "清单文件格式错误"
+        PlaybackException.ERROR_CODE_DECODER_INIT_FAILED -> "解码器初始化失败"
+        PlaybackException.ERROR_CODE_UNSPECIFIED -> "播放错误: 不支持的媒体格式或编码"
+        else -> "播放错误: ${error.message ?: "未知错误 (代码: ${error.errorCode})"}"
+    }
+    onError(errorMsg)
+}
+```
+
+## 数据库Schema迁移
+
+### 问题分析
+
+错误 "no such column: Channel.categoryId" 表示：
+1. 旧版本数据库没有 `categoryId` 列
+2. 新代码尝试访问该列导致SQL错误
+3. SQLDelight没有配置自动迁移
+
+### 解决方案架构
+
+```
+Database Migration System
+    ├── Version Detection
+    │   └── 检查当前schema版本
+    ├── Migration Scripts
+    │   ├── Version 1 → 2: 添加categoryId列
+    │   └── 未来迁移...
+    └── Error Recovery
+        ├── 记录迁移日志
+        └── 提供重置选项
+```
+
+### 实现方案
+
+#### 1. 添加Schema版本管理
+
+在SQLDelight配置中添加版本号：
+
+```kotlin
+// IptvDatabase.sq
+-- Schema Version: 2
+
+-- Migration from version 1 to 2
+-- ALTER TABLE Channel ADD COLUMN categoryId TEXT;
+```
+
+#### 2. 创建迁移管理器
+
+```kotlin
+object DatabaseMigration {
+    private const val CURRENT_VERSION = 2
+    private const val VERSION_KEY = "db_version"
+    
+    suspend fun migrate(driver: SqlDriver, dataStore: DataStore<Preferences>) {
+        val currentVersion = dataStore.data.first()[intPreferencesKey(VERSION_KEY)] ?: 1
+        
+        if (currentVersion < CURRENT_VERSION) {
+            performMigration(driver, currentVersion, CURRENT_VERSION)
+            dataStore.edit { it[intPreferencesKey(VERSION_KEY)] = CURRENT_VERSION }
+        }
+    }
+    
+    private fun performMigration(driver: SqlDriver, from: Int, to: Int) {
+        when {
+            from == 1 && to >= 2 -> migrateV1ToV2(driver)
+        }
+    }
+    
+    private fun migrateV1ToV2(driver: SqlDriver) {
+        try {
+            driver.execute(null, "ALTER TABLE Channel ADD COLUMN categoryId TEXT", 0)
+            println("✓ Database migrated from v1 to v2: added categoryId column")
+        } catch (e: Exception) {
+            // Column might already exist
+            println("Migration v1→v2: ${e.message}")
+        }
+    }
+}
+```
+
+#### 3. 在应用启动时执行迁移
+
+```kotlin
+// Koin.kt
+single {
+    val driver = createDatabaseDriver(androidContext())
+    
+    // 执行迁移
+    runBlocking {
+        DatabaseMigration.migrate(driver, get())
+    }
+    
+    IptvDatabase(driver)
+}
+```
+
+### 备用方案：安全的列访问
+
+如果迁移失败，在DAO中添加安全检查：
+
+```kotlin
+private fun hasColumn(tableName: String, columnName: String): Boolean {
+    return try {
+        database.iptvDatabaseQueries.executeQuery(
+            "SELECT $columnName FROM $tableName LIMIT 0"
+        )
+        true
+    } catch (e: Exception) {
+        false
+    }
+}
+```
+
+### 用户数据保护
+
+在迁移前备份数据：
+
+```kotlin
+suspend fun backupDatabase(context: Context) {
+    val dbFile = context.getDatabasePath("iptv.db")
+    val backupFile = File(context.filesDir, "iptv_backup_${System.currentTimeMillis()}.db")
+    dbFile.copyTo(backupFile, overwrite = true)
+}
+```
+
+### 错误恢复
+
+如果迁移失败，提供重置选项：
+
+```kotlin
+suspend fun resetDatabase(driver: SqlDriver) {
+    try {
+        // 删除所有表
+        driver.execute(null, "DROP TABLE IF EXISTS Channel", 0)
+        driver.execute(null, "DROP TABLE IF EXISTS Playlist", 0)
+        driver.execute(null, "DROP TABLE IF EXISTS Category", 0)
+        driver.execute(null, "DROP TABLE IF EXISTS Favorite", 0)
+        driver.execute(null, "DROP TABLE IF EXISTS EpgProgram", 0)
+        
+        // 重新创建schema
+        IptvDatabase.Schema.create(driver)
+        
+        println("✓ Database reset successfully")
+    } catch (e: Exception) {
+        println("✗ Failed to reset database: ${e.message}")
+        throw e
+    }
+}
+```
+
+## 测试策略更新
+
+### ExoPlayer流媒体测试
+
+1. **单元测试**：
+   - 测试不同流媒体URL的格式检测
+   - 测试错误消息转换逻辑
+
+2. **集成测试**：
+   - 使用测试HLS流验证播放
+   - 测试格式切换（从普通URL到HLS）
+   - 测试错误场景（无效URL、网络错误）
+
+### 数据库迁移测试
+
+1. **单元测试**：
+   - 测试版本检测逻辑
+   - 测试迁移脚本执行
+   - 测试备份和恢复功能
+
+2. **集成测试**：
+   - 创建v1数据库并测试迁移到v2
+   - 测试迁移后数据完整性
+   - 测试迁移失败时的错误处理
+
+3. **属性测试**：
+   - 迁移应该是幂等的（多次执行结果相同）
+   - 迁移不应该丢失现有数据
+   - 迁移后所有查询应该正常工作

@@ -77,3 +77,47 @@
   - 测试网络请求失败时的重试机制
   - 验证没有内存泄漏
   - _Requirements: 1.1, 2.1, 4.1, 4.4, 5.1_
+
+
+- [ ] 12. 添加ExoPlayer流媒体格式支持
+  - 在build.gradle.kts的androidMain中添加media3-exoplayer-hls依赖
+  - 添加media3-exoplayer-dash依赖
+  - 添加media3-exoplayer-smoothstreaming依赖
+  - 更新libs.versions.toml确保版本一致
+  - _Requirements: 6.1, 6.2, 6.3_
+
+- [ ] 13. 改进ExoPlayer错误消息
+  - 在VideoPlayer.android.kt的onPlayerError中添加更多错误代码处理
+  - 将ERROR_CODE_DECODER_INIT_FAILED映射为用户友好消息
+  - 将ERROR_CODE_UNSPECIFIED映射为"不支持的媒体格式"消息
+  - 在错误消息中包含错误代码以便调试
+  - _Requirements: 6.4_
+
+- [ ] 14. 实现数据库迁移系统
+  - 创建DatabaseMigration.kt工具类
+  - 实现版本检测逻辑使用DataStore存储版本号
+  - 实现migrateV1ToV2函数添加categoryId列
+  - 添加迁移日志记录
+  - _Requirements: 7.1, 7.2, 7.3_
+
+- [ ] 15. 集成数据库迁移到应用启动流程
+  - 在Koin.kt的数据库初始化前调用DatabaseMigration.migrate
+  - 添加错误处理捕获迁移失败
+  - 在迁移失败时记录详细错误信息
+  - 提供数据库重置选项作为备用方案
+  - _Requirements: 7.1, 7.4_
+
+- [ ] 16. 添加数据库备份和恢复功能
+  - 实现backupDatabase函数在迁移前备份数据
+  - 实现resetDatabase函数用于错误恢复
+  - 在Android平台使用Context.getDatabasePath获取数据库文件
+  - 在Desktop平台使用文件系统路径
+  - _Requirements: 7.4_
+
+- [ ] 17. 测试流媒体播放和数据库迁移
+  - 测试Android版本可以播放HLS流媒体
+  - 测试DASH和SmoothStreaming格式
+  - 测试数据库从v1迁移到v2
+  - 测试迁移后categoryId列存在且可用
+  - 验证错误消息更加用户友好
+  - _Requirements: 6.1, 6.2, 6.3, 6.4, 7.1, 7.2, 7.3_

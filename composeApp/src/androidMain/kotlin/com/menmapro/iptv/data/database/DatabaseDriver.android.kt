@@ -9,5 +9,5 @@ import org.koin.mp.KoinPlatformTools
 actual fun createDatabaseDriver(): SqlDriver {
     // Get Android context from Koin
     val context = KoinPlatformTools.defaultContext().get().get<android.content.Context>()
-    return AndroidSqliteDriver(IptvDatabase.Schema, context, "iptv.db")
+    return AndroidSqliteDriver(DatabaseSchema, context, "iptv.db")
 }

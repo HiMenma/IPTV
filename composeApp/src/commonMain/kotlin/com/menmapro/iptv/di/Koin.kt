@@ -1,7 +1,10 @@
 package com.menmapro.iptv.di
 
+import com.menmapro.iptv.data.database.DatabaseMigration
 import com.menmapro.iptv.data.database.IptvDatabase
 import com.menmapro.iptv.data.database.createDatabaseDriver
+import com.menmapro.iptv.data.database.createDataStore
+import com.menmapro.iptv.data.database.dao.CategoryDao
 import com.menmapro.iptv.data.database.dao.EpgDao
 import com.menmapro.iptv.data.database.dao.FavoriteDao
 import com.menmapro.iptv.data.database.dao.PlaylistDao
@@ -40,9 +43,25 @@ val appModule = module {
         }
     }
 
-    // Database
+    // DataStore
+    single { createDataStore() }
+
+    // Database with migration
     single { 
         val driver = createDatabaseDriver()
+        val dataStore = get<androidx.datastore.core.DataStore<androidx.datastore.preferences.core.Preferences>>()
+        
+        // Perform migration before creating database instance
+        try {
+            kotlinx.coroutines.runBlocking {
+                com.menmapro.iptv.data.database.DatabaseMigration.migrate(driver, dataStore)
+            }
+        } catch (e: Exception) {
+            println("[Koin] ERROR: Database migration failed: ${e.message}")
+            e.printStackTrace()
+            // Continue anyway - the app might still work if schema is correct
+        }
+        
         IptvDatabase(driver)
     }
 
@@ -50,13 +69,21 @@ val appModule = module {
     single { PlaylistDao(get()) }
     single { FavoriteDao(get()) }
     single { EpgDao(get()) }
+    single { CategoryDao(get()) }
 
     // Parsers and Clients
     single { M3uParser() }
     single { XtreamClient(get()) }
 
     // Repositories
-    single { PlaylistRepository(httpClient = get(), m3uParser = get(), xtreamClient = get(), playlistDao = get()) }
+    single { 
+        PlaylistRepository(
+            httpClient = get(), 
+            m3uParser = get(), 
+            xtreamClient = get(), 
+            playlistDao = get()
+        ) 
+    }
     single { FavoriteRepository(get()) }
 
     // ViewModels/ScreenModels

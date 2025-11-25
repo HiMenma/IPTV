@@ -60,3 +60,25 @@
 2. IF VLC未找到 THEN 系统 SHALL 显示安装指引对话框
 3. WHEN VLC检测失败 THEN 系统 SHALL 提供手动指定VLC路径的选项
 4. WHEN VLC可用 THEN 系统 SHALL 正常初始化视频播放器组件
+
+### Requirement 6: 修复Android ExoPlayer流媒体格式支持
+
+**User Story:** 作为Android用户，我希望能够播放M3U播放列表中的各种流媒体格式（HLS、DASH等），以便正常观看直播频道。
+
+#### Acceptance Criteria
+
+1. WHEN 播放HLS流媒体 THEN 系统 SHALL 成功加载并播放内容
+2. WHEN 播放DASH流媒体 THEN 系统 SHALL 成功加载并播放内容
+3. WHEN 播放SmoothStreaming流媒体 THEN 系统 SHALL 成功加载并播放内容
+4. WHEN ExoPlayer遇到不支持的格式 THEN 系统 SHALL 显示清晰的错误消息而不是技术错误代码
+
+### Requirement 7: 修复数据库Schema迁移问题
+
+**User Story:** 作为开发者，我希望数据库能够自动迁移到新的schema版本，以便用户升级应用时不会遇到"列不存在"的错误。
+
+#### Acceptance Criteria
+
+1. WHEN 应用启动时检测到旧版本数据库 THEN 系统 SHALL 自动执行迁移
+2. WHEN 数据库缺少categoryId列 THEN 系统 SHALL 添加该列并设置默认值
+3. WHEN 迁移完成 THEN 系统 SHALL 记录迁移日志
+4. IF 迁移失败 THEN 系统 SHALL 提供清晰的错误信息并允许用户选择重置数据库

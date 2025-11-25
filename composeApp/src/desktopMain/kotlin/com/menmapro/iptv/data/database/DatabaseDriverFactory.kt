@@ -38,9 +38,9 @@ actual class DatabaseDriverFactory {
                 throw IllegalStateException("Failed to create database driver: ${e.message}", e)
             }
             
-            // Create database schema
+            // Create database schema with migration support
             try {
-                IptvDatabase.Schema.create(driver)
+                DatabaseSchema.create(driver)
                 println("[DatabaseFactory] Database schema created successfully")
             } catch (e: Exception) {
                 // Clean up driver on schema creation failure

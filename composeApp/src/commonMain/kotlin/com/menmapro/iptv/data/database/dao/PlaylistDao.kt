@@ -81,7 +81,7 @@ class PlaylistDao(private val database: IptvDatabase) {
     }
     
     suspend fun insertPlaylist(playlist: Playlist) = withContext(Dispatchers.Default) {
-        logInfo("Inserting playlist into database: id='${playlist.id}', name='${playlist.name}', channels=${playlist.channels.size}")
+        logInfo("Inserting playlist into database: id='${playlist.id}', name='${playlist.name}', channels=${playlist.channels.size}, categories=${playlist.categories.size}")
         try {
             val currentTime = System.currentTimeMillis()
             
@@ -101,6 +101,24 @@ class PlaylistDao(private val database: IptvDatabase) {
                 logInfo("Deleting old channels for playlist: id='${playlist.id}'")
                 database.iptvDatabaseQueries.deleteChannelsByPlaylistId(playlist.id)
                 
+                // Insert categories if present
+                if (playlist.categories.isNotEmpty()) {
+                    logInfo("Inserting ${playlist.categories.size} categories for playlist: id='${playlist.id}'")
+                    playlist.categories.forEach { category ->
+                        try {
+                            database.iptvDatabaseQueries.insertCategory(
+                                id = category.id,
+                                playlistId = playlist.id,
+                                name = category.name,
+                                parentId = category.parentId
+                            )
+                        } catch (e: Exception) {
+                            logError("Failed to insert category: id='${category.id}', name='${category.name}'", e)
+                            throw e
+                        }
+                    }
+                }
+                
                 // Insert channels
                 logInfo("Inserting ${playlist.channels.size} channels for playlist: id='${playlist.id}'")
                 playlist.channels.forEachIndexed { index, channel ->
@@ -114,7 +132,8 @@ class PlaylistDao(private val database: IptvDatabase) {
                             groupName = channel.group,
                             tvgId = null,
                             tvgName = null,
-                            epgChannelId = null
+                            epgChannelId = null,
+                            categoryId = channel.categoryId
                         )
                     } catch (e: Exception) {
                         logError("Failed to insert channel ${index + 1}/${playlist.channels.size}: id='${channel.id}', name='${channel.name}'", e)
@@ -122,7 +141,7 @@ class PlaylistDao(private val database: IptvDatabase) {
                     }
                 }
             }
-            logInfo("Successfully inserted playlist: id='${playlist.id}', name='${playlist.name}', channels=${playlist.channels.size}")
+            logInfo("Successfully inserted playlist: id='${playlist.id}', name='${playlist.name}', channels=${playlist.channels.size}, categories=${playlist.categories.size}")
         } catch (e: Exception) {
             logError("Failed to insert playlist: id='${playlist.id}', name='${playlist.name}'", e)
             throw e
@@ -152,13 +171,93 @@ class PlaylistDao(private val database: IptvDatabase) {
                             name = dbChannel.name,
                             url = dbChannel.url,
                             logoUrl = dbChannel.logoUrl,
-                            group = dbChannel.groupName
+                            group = dbChannel.groupName,
+                            categoryId = dbChannel.categoryId
                         )
                     }
                 logInfo("Fetched ${channels.size} channels for playlist: id='$playlistId'")
                 channels
             } catch (e: Exception) {
                 logError("Failed to fetch channels for playlist: id='$playlistId'", e)
+                throw e
+            }
+        }
+    
+    suspend fun updatePlaylistName(playlistId: String, newName: String) = withContext(Dispatchers.Default) {
+        logInfo("Updating playlist name: id='$playlistId', newName='$newName'")
+        try {
+            val currentTime = System.currentTimeMillis()
+            database.iptvDatabaseQueries.updatePlaylistName(
+                name = newName,
+                updatedAt = currentTime,
+                id = playlistId
+            )
+            logInfo("Successfully updated playlist name: id='$playlistId', newName='$newName'")
+        } catch (e: Exception) {
+            logError("Failed to update playlist name: id='$playlistId', newName='$newName'", e)
+            throw e
+        }
+    }
+    
+    suspend fun getCategoriesByPlaylistId(playlistId: String): List<com.menmapro.iptv.data.model.Category> = 
+        withContext(Dispatchers.Default) {
+            logInfo("Fetching categories for playlist: id='$playlistId'")
+            try {
+                val categories = database.iptvDatabaseQueries
+                    .selectCategoriesByPlaylistId(playlistId)
+                    .executeAsList()
+                    .map { dbCategory ->
+                        com.menmapro.iptv.data.model.Category(
+                            id = dbCategory.id,
+                            name = dbCategory.name,
+                            parentId = dbCategory.parentId
+                        )
+                    }
+                logInfo("Fetched ${categories.size} categories for playlist: id='$playlistId'")
+                categories
+            } catch (e: Exception) {
+                logError("Failed to fetch categories for playlist: id='$playlistId'", e)
+                throw e
+            }
+        }
+    
+    suspend fun getChannelsByCategoryId(playlistId: String, categoryId: String): List<Channel> = 
+        withContext(Dispatchers.Default) {
+            logInfo("Fetching channels by category: playlistId='$playlistId', categoryId='$categoryId'")
+            try {
+                val channels = database.iptvDatabaseQueries
+                    .selectChannelsByCategoryId(playlistId, categoryId)
+                    .executeAsList()
+                    .map { dbChannel ->
+                        Channel(
+                            id = dbChannel.id,
+                            name = dbChannel.name,
+                            url = dbChannel.url,
+                            logoUrl = dbChannel.logoUrl,
+                            group = dbChannel.groupName,
+                            categoryId = dbChannel.categoryId
+                        )
+                    }
+                logInfo("Fetched ${channels.size} channels for category: playlistId='$playlistId', categoryId='$categoryId'")
+                channels
+            } catch (e: Exception) {
+                logError("Failed to fetch channels by category: playlistId='$playlistId', categoryId='$categoryId'", e)
+                throw e
+            }
+        }
+    
+    suspend fun getCategoryChannelCounts(playlistId: String): Map<String, Int> = 
+        withContext(Dispatchers.Default) {
+            logInfo("Fetching channel counts by category for playlist: id='$playlistId'")
+            try {
+                val counts = database.iptvDatabaseQueries
+                    .countChannelsByCategory(playlistId)
+                    .executeAsList()
+                    .associate { it.categoryId to it.channelCount.toInt() }
+                logInfo("Fetched channel counts for ${counts.size} categories in playlist: id='$playlistId'")
+                counts
+            } catch (e: Exception) {
+                logError("Failed to fetch category channel counts for playlist: id='$playlistId'", e)
                 throw e
             }
         }

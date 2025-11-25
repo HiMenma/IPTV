@@ -103,7 +103,8 @@ class XtreamClient(private val httpClient: HttpClient) {
                     name = stream.name,
                     url = "${account.serverUrl}/live/${account.username}/${account.password}/${stream.stream_id}.ts",
                     logoUrl = stream.stream_icon,
-                    group = stream.category_id
+                    group = stream.category_id,
+                    categoryId = stream.category_id
                 )
             }
             logInfo("Successfully fetched ${channels.size} live streams from Xtream server")

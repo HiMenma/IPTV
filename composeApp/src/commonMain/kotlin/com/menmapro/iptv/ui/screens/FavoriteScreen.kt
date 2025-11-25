@@ -22,6 +22,7 @@ import cafe.adriel.voyager.navigator.currentOrThrow
 import coil3.compose.AsyncImage
 import com.menmapro.iptv.data.model.Channel
 import com.menmapro.iptv.data.repository.FavoriteRepository
+import com.menmapro.iptv.ui.components.EmptyView
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.SharingStarted
@@ -47,14 +48,10 @@ class FavoriteScreen : Screen {
             }
         ) { padding ->
             if (favorites.isEmpty()) {
-                Box(
-                    modifier = Modifier
-                        .padding(padding)
-                        .fillMaxSize(),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text("暂无收藏频道")
-                }
+                EmptyView(
+                    message = "暂无收藏频道",
+                    modifier = Modifier.padding(padding).fillMaxSize()
+                )
             } else {
                 LazyColumn(modifier = Modifier.padding(padding).fillMaxSize()) {
                     items(favorites) { channel ->

@@ -16,7 +16,9 @@ actual fun VideoPlayer(
     url: String,
     modifier: Modifier,
     playerState: MutableState<PlayerState>,
-    onPlayerControls: (PlayerControls) -> Unit
+    onPlayerControls: (PlayerControls) -> Unit,
+    onError: (String) -> Unit,
+    onPlayerInitFailed: () -> Unit
 ) {
     val context = LocalContext.current
     
@@ -72,13 +74,16 @@ actual fun VideoPlayer(
                         PlaybackException.ERROR_CODE_IO_BAD_HTTP_STATUS -> "HTTP错误: ${error.message}"
                         PlaybackException.ERROR_CODE_PARSING_CONTAINER_MALFORMED -> "媒体格式错误"
                         PlaybackException.ERROR_CODE_PARSING_MANIFEST_MALFORMED -> "清单文件格式错误"
-                        else -> "播放错误: ${error.message ?: "未知错误"}"
+                        PlaybackException.ERROR_CODE_DECODER_INIT_FAILED -> "解码器初始化失败，设备可能不支持此格式"
+                        PlaybackException.ERROR_CODE_UNSPECIFIED -> "播放错误: 不支持的媒体格式或编码"
+                        else -> "播放错误: ${error.message ?: "未知错误"} (代码: ${error.errorCode})"
                     }
                     
                     playerState.value = playerState.value.copy(
                         playbackState = PlaybackState.ERROR,
                         errorMessage = errorMsg
                     )
+                    onError(errorMsg)
                     println("Player error: $errorMsg")
                 } catch (e: Exception) {
                     println("Error in onPlayerError: ${e.message}")
@@ -88,17 +93,27 @@ actual fun VideoPlayer(
     }
     
     val exoPlayer = remember {
-        ExoPlayer.Builder(context).build().apply {
-            setMediaItem(MediaItem.fromUri(url))
-            prepare()
-            playWhenReady = true
+        try {
+            ExoPlayer.Builder(context).build().apply {
+                setMediaItem(MediaItem.fromUri(url))
+                prepare()
+                playWhenReady = true
+            }
+        } catch (e: Exception) {
+            val errorMsg = "Error initializing ExoPlayer: ${e.message}"
+            println(errorMsg)
+            e.printStackTrace()
+            // Notify about initialization failure
+            onPlayerInitFailed()
+            onError(errorMsg)
+            null
         }
     }
     
-    val controls = remember {
+    val controls = remember(exoPlayer) {
         object : PlayerControls {
             override fun play() {
-                if (!verifyPlayerState("play", isReleased, exoPlayer, playerState)) {
+                if (exoPlayer == null || !verifyPlayerState("play", isReleased, exoPlayer, playerState)) {
                     return
                 }
                 try {
@@ -111,11 +126,12 @@ actual fun VideoPlayer(
                         playbackState = PlaybackState.ERROR,
                         errorMessage = errorMsg
                     )
+                    onError(errorMsg)
                 }
             }
             
             override fun pause() {
-                if (!verifyPlayerState("pause", isReleased, exoPlayer, playerState)) {
+                if (exoPlayer == null || !verifyPlayerState("pause", isReleased, exoPlayer, playerState)) {
                     return
                 }
                 try {
@@ -128,11 +144,12 @@ actual fun VideoPlayer(
                         playbackState = PlaybackState.ERROR,
                         errorMessage = errorMsg
                     )
+                    onError(errorMsg)
                 }
             }
             
             override fun seekTo(positionMs: Long) {
-                if (!verifyPlayerState("seekTo", isReleased, exoPlayer, playerState)) {
+                if (exoPlayer == null || !verifyPlayerState("seekTo", isReleased, exoPlayer, playerState)) {
                     return
                 }
                 try {
@@ -144,11 +161,12 @@ actual fun VideoPlayer(
                     playerState.value = playerState.value.copy(
                         errorMessage = errorMsg
                     )
+                    onError(errorMsg)
                 }
             }
             
             override fun setVolume(volume: Float) {
-                if (!verifyPlayerState("setVolume", isReleased, exoPlayer, playerState)) {
+                if (exoPlayer == null || !verifyPlayerState("setVolume", isReleased, exoPlayer, playerState)) {
                     return
                 }
                 try {
@@ -161,11 +179,12 @@ actual fun VideoPlayer(
                     playerState.value = playerState.value.copy(
                         errorMessage = errorMsg
                     )
+                    onError(errorMsg)
                 }
             }
             
             override fun toggleFullscreen() {
-                if (!verifyPlayerState("toggleFullscreen", isReleased, exoPlayer, playerState)) {
+                if (exoPlayer == null || !verifyPlayerState("toggleFullscreen", isReleased, exoPlayer, playerState)) {
                     return
                 }
                 // TODO: Implement fullscreen
@@ -173,38 +192,74 @@ actual fun VideoPlayer(
             }
             
             override fun release() {
-                safeReleasePlayer(exoPlayer, playerListener, isReleased, listenerRegistered)
+                if (exoPlayer != null) {
+                    safeReleasePlayer(exoPlayer, playerListener, isReleased, listenerRegistered)
+                }
             }
         }
     }
     
     DisposableEffect(Unit) {
-        // Add listener and track registration
-        try {
-            exoPlayer.addListener(playerListener)
-            listenerRegistered.value = true
-            println("ExoPlayer listener registered successfully")
-        } catch (e: Exception) {
-            println("Error adding ExoPlayer listener: ${e.message}")
-            listenerRegistered.value = false
+        // Validate URL before proceeding
+        if (url.isBlank()) {
+            val errorMsg = "无效的播放地址"
+            onError(errorMsg)
+            playerState.value = playerState.value.copy(
+                playbackState = PlaybackState.ERROR,
+                errorMessage = errorMsg
+            )
+            return@DisposableEffect onDispose {}
+        }
+        
+        if (exoPlayer != null) {
+            // Add listener and track registration
+            try {
+                exoPlayer.addListener(playerListener)
+                listenerRegistered.value = true
+                println("ExoPlayer listener registered successfully")
+            } catch (e: Exception) {
+                val errorMsg = "Error adding ExoPlayer listener: ${e.message}"
+                println(errorMsg)
+                listenerRegistered.value = false
+                onPlayerInitFailed()
+                onError(errorMsg)
+            }
+        } else {
+            // exoPlayer is null, initialization failed
+            onPlayerInitFailed()
         }
         
         onPlayerControls(controls)
         
         onDispose {
             println("DisposableEffect onDispose called - cleaning up ExoPlayer resources")
-            safeReleasePlayer(exoPlayer, playerListener, isReleased, listenerRegistered)
+            if (exoPlayer != null) {
+                safeReleasePlayer(exoPlayer, playerListener, isReleased, listenerRegistered)
+            }
         }
     }
     
     // Handle URL changes - improved with proper resource cleanup
     LaunchedEffect(url) {
-        if (isReleased.value) {
-            println("Cannot load URL: player is released")
+        // Validate URL
+        if (url.isBlank()) {
+            val errorMsg = "无效的播放地址"
+            onError(errorMsg)
             playerState.value = playerState.value.copy(
                 playbackState = PlaybackState.ERROR,
-                errorMessage = "播放器未初始化"
+                errorMessage = errorMsg
             )
+            return@LaunchedEffect
+        }
+        
+        if (isReleased.value || exoPlayer == null) {
+            val errorMsg = "播放器未初始化"
+            println("Cannot load URL: player is released or not initialized")
+            playerState.value = playerState.value.copy(
+                playbackState = PlaybackState.ERROR,
+                errorMessage = errorMsg
+            )
+            onError(errorMsg)
             return@LaunchedEffect
         }
         
@@ -255,14 +310,15 @@ actual fun VideoPlayer(
                 playbackState = PlaybackState.ERROR,
                 errorMessage = errorMsg
             )
+            onError(errorMsg)
         }
     }
     
     // Update player state periodically
-    LaunchedEffect(Unit) {
+    LaunchedEffect(exoPlayer) {
         while (true) {
             kotlinx.coroutines.delay(500)
-            if (isReleased.value) break
+            if (isReleased.value || exoPlayer == null) break
             
             try {
                 if (exoPlayer.isPlaying) {
@@ -285,19 +341,21 @@ actual fun VideoPlayer(
         }
     }
     
-    AndroidView(
-        factory = { ctx ->
-            PlayerView(ctx).apply {
-                player = exoPlayer
-                useController = true
-                layoutParams = ViewGroup.LayoutParams(
-                    ViewGroup.LayoutParams.MATCH_PARENT,
-                    ViewGroup.LayoutParams.MATCH_PARENT
-                )
-            }
-        },
-        modifier = modifier
-    )
+    if (exoPlayer != null) {
+        AndroidView(
+            factory = { ctx ->
+                PlayerView(ctx).apply {
+                    player = exoPlayer
+                    useController = true
+                    layoutParams = ViewGroup.LayoutParams(
+                        ViewGroup.LayoutParams.MATCH_PARENT,
+                        ViewGroup.LayoutParams.MATCH_PARENT
+                    )
+                }
+            },
+            modifier = modifier
+        )
+    }
 }
 
 /**

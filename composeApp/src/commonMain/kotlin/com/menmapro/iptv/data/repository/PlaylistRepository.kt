@@ -260,5 +260,78 @@ class PlaylistRepository(
             throw Exception("Failed to fetch playlist: ${e.message ?: "Unknown error"}", e)
         }
     }
+    
+    suspend fun renamePlaylist(playlistId: String, newName: String) {
+        logInfo("Renaming playlist: id='$playlistId', newName='$newName'")
+        
+        // Validate input
+        if (newName.isBlank()) {
+            logError("Attempted to rename playlist with empty name: id='$playlistId'")
+            throw IllegalArgumentException("Playlist name cannot be empty")
+        }
+        
+        if (newName.length > 100) {
+            logError("Attempted to rename playlist with name too long: id='$playlistId', length=${newName.length}")
+            throw IllegalArgumentException("Playlist name cannot exceed 100 characters")
+        }
+        
+        try {
+            playlistDao.updatePlaylistName(playlistId, newName.trim())
+            logInfo("Successfully renamed playlist: id='$playlistId', newName='$newName'")
+        } catch (e: Exception) {
+            logError("Failed to rename playlist: id='$playlistId', newName='$newName'", e)
+            throw Exception("Failed to rename playlist: ${e.message ?: "Unknown error"}", e)
+        }
+    }
+    
+    suspend fun getCategories(playlistId: String): List<com.menmapro.iptv.data.model.Category> {
+        logInfo("Fetching categories for playlist: id='$playlistId'")
+        try {
+            val playlist = getPlaylistById(playlistId)
+            if (playlist == null) {
+                logError("Playlist not found when fetching categories: id='$playlistId'")
+                throw Exception("Playlist not found")
+            }
+            
+            return when (playlist.type) {
+                PlaylistType.XTREAM -> {
+                    val categories = playlistDao.getCategoriesByPlaylistId(playlistId)
+                    logInfo("Successfully fetched ${categories.size} categories for Xtream playlist: id='$playlistId'")
+                    categories
+                }
+                else -> {
+                    logInfo("Playlist is not Xtream type, returning empty categories: id='$playlistId', type=${playlist.type}")
+                    emptyList()
+                }
+            }
+        } catch (e: Exception) {
+            logError("Failed to fetch categories for playlist: id='$playlistId'", e)
+            throw Exception("Failed to fetch categories: ${e.message ?: "Unknown error"}", e)
+        }
+    }
+    
+    suspend fun getChannelsByCategory(playlistId: String, categoryId: String): List<Channel> {
+        logInfo("Fetching channels by category: playlistId='$playlistId', categoryId='$categoryId'")
+        try {
+            val channels = playlistDao.getChannelsByCategoryId(playlistId, categoryId)
+            logInfo("Successfully fetched ${channels.size} channels for category: playlistId='$playlistId', categoryId='$categoryId'")
+            return channels
+        } catch (e: Exception) {
+            logError("Failed to fetch channels by category: playlistId='$playlistId', categoryId='$categoryId'", e)
+            throw Exception("Failed to fetch channels by category: ${e.message ?: "Unknown error"}", e)
+        }
+    }
+    
+    suspend fun getCategoryChannelCount(playlistId: String): Map<String, Int> {
+        logInfo("Fetching channel counts by category for playlist: id='$playlistId'")
+        try {
+            val counts = playlistDao.getCategoryChannelCounts(playlistId)
+            logInfo("Successfully fetched channel counts for ${counts.size} categories in playlist: id='$playlistId'")
+            return counts
+        } catch (e: Exception) {
+            logError("Failed to fetch category channel counts for playlist: id='$playlistId'", e)
+            throw Exception("Failed to fetch category channel counts: ${e.message ?: "Unknown error"}", e)
+        }
+    }
 }
 

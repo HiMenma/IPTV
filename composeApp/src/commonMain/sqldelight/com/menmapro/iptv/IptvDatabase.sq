@@ -19,6 +19,16 @@ CREATE TABLE IF NOT EXISTS Channel (
     tvgId TEXT,
     tvgName TEXT,
     epgChannelId TEXT,
+    categoryId TEXT,
+    FOREIGN KEY (playlistId) REFERENCES Playlist(id) ON DELETE CASCADE
+);
+
+-- Category table
+CREATE TABLE IF NOT EXISTS Category (
+    id TEXT PRIMARY KEY NOT NULL,
+    playlistId TEXT NOT NULL,
+    name TEXT NOT NULL,
+    parentId TEXT,
     FOREIGN KEY (playlistId) REFERENCES Playlist(id) ON DELETE CASCADE
 );
 
@@ -54,6 +64,9 @@ VALUES (?, ?, ?, ?, ?, ?);
 deletePlaylist:
 DELETE FROM Playlist WHERE id = ?;
 
+updatePlaylistName:
+UPDATE Playlist SET name = ?, updatedAt = ? WHERE id = ?;
+
 -- Queries for Channel
 selectChannelsByPlaylistId:
 SELECT * FROM Channel WHERE playlistId = ? ORDER BY name ASC;
@@ -62,8 +75,8 @@ selectChannelById:
 SELECT * FROM Channel WHERE id = ?;
 
 insertChannel:
-INSERT OR REPLACE INTO Channel(id, playlistId, name, url, logoUrl, groupName, tvgId, tvgName, epgChannelId)
-VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);
+INSERT OR REPLACE INTO Channel(id, playlistId, name, url, logoUrl, groupName, tvgId, tvgName, epgChannelId, categoryId)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
 
 deleteChannelsByPlaylistId:
 DELETE FROM Channel WHERE playlistId = ?;
@@ -103,3 +116,20 @@ DELETE FROM EpgProgram WHERE endTime < ?;
 
 deleteEpgByChannelId:
 DELETE FROM EpgProgram WHERE channelId = ?;
+
+-- Queries for Category
+selectCategoriesByPlaylistId:
+SELECT * FROM Category WHERE playlistId = ? ORDER BY name ASC;
+
+insertCategory:
+INSERT OR REPLACE INTO Category(id, playlistId, name, parentId)
+VALUES (?, ?, ?, ?);
+
+countChannelsByCategory:
+SELECT categoryId, COUNT(*) AS channelCount 
+FROM Channel 
+WHERE playlistId = ? AND categoryId IS NOT NULL
+GROUP BY categoryId;
+
+selectChannelsByCategoryId:
+SELECT * FROM Channel WHERE playlistId = ? AND categoryId = ? ORDER BY name ASC;

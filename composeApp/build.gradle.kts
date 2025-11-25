@@ -73,6 +73,9 @@ kotlin {
                 implementation(libs.androidx.media3.exoplayer)
                 implementation(libs.androidx.media3.ui)
                 implementation(libs.androidx.media3.common)
+                implementation(libs.androidx.media3.exoplayer.hls)
+                implementation(libs.androidx.media3.exoplayer.dash)
+                implementation(libs.androidx.media3.exoplayer.smoothstreaming)
                 
                 // Database Driver
                 implementation(libs.sqldelight.android.driver)
@@ -90,6 +93,26 @@ kotlin {
                 
                 // Database Driver
                 implementation(libs.sqldelight.sqlite.driver)
+            }
+        }
+        
+        val commonTest by getting {
+            dependencies {
+                implementation(libs.kotlin.test)
+                implementation(libs.kotlin.test.junit)
+                implementation(libs.kotlinx.coroutines.core)
+                implementation(libs.sqldelight.sqlite.driver)
+                implementation(libs.kotest.property)
+                implementation(libs.kotest.assertions.core)
+                implementation(libs.kotest.framework.engine)
+            }
+        }
+        
+        val desktopTest by getting {
+            dependencies {
+                implementation(libs.kotlin.test)
+                implementation(libs.kotlin.test.junit)
+                implementation(libs.kotest.runner.junit5)
             }
         }
     }

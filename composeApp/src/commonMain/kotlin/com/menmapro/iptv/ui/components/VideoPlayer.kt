@@ -9,5 +9,7 @@ expect fun VideoPlayer(
     url: String,
     modifier: Modifier = Modifier,
     playerState: MutableState<PlayerState>,
-    onPlayerControls: (PlayerControls) -> Unit
+    onPlayerControls: (PlayerControls) -> Unit,
+    onError: (String) -> Unit = {},
+    onPlayerInitFailed: () -> Unit = {}
 )

@@ -7,6 +7,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.runtime.*
@@ -22,7 +23,11 @@ import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
 import com.menmapro.iptv.data.model.Playlist
 import com.menmapro.iptv.data.model.XtreamAccount
+import com.menmapro.iptv.data.model.getDisplayName
+import com.menmapro.iptv.data.model.getIcon
 import com.menmapro.iptv.data.repository.PlaylistRepository
+import com.menmapro.iptv.ui.components.EmptyView
+import com.menmapro.iptv.ui.components.RenamePlaylistDialog
 import kotlinx.coroutines.launch
 
 class PlaylistScreen : Screen {
@@ -32,6 +37,7 @@ class PlaylistScreen : Screen {
         val screenModel = getScreenModel<PlaylistScreenModel>()
         val playlists by screenModel.playlists.collectAsState(emptyList())
         var showAddDialog by remember { mutableStateOf(false) }
+        var playlistToRename by remember { mutableStateOf<Playlist?>(null) }
 
         Scaffold(
             topBar = { 
@@ -54,10 +60,34 @@ class PlaylistScreen : Screen {
                 }
             }
         ) { padding ->
-            LazyColumn(modifier = Modifier.padding(padding).fillMaxSize()) {
-                items(playlists) { playlist ->
-                    PlaylistRow(playlist) {
-                        navigator.push(ChannelListScreen(playlist))
+            if (playlists.isEmpty()) {
+                EmptyView(
+                    message = "暂无播放列表\n点击右下角按钮添加",
+                    modifier = Modifier.padding(padding).fillMaxSize()
+                )
+            } else {
+                LazyColumn(modifier = Modifier.padding(padding).fillMaxSize()) {
+                    items(playlists) { playlist ->
+                        PlaylistRow(
+                            playlist = playlist,
+                            onClick = {
+                                // Navigate based on playlist type
+                                when (playlist.type) {
+                                    com.menmapro.iptv.data.model.PlaylistType.XTREAM -> {
+                                        // For Xtream playlists, show category list first
+                                        navigator.push(CategoryListScreen(playlist))
+                                    }
+                                    com.menmapro.iptv.data.model.PlaylistType.M3U_URL,
+                                    com.menmapro.iptv.data.model.PlaylistType.M3U_FILE -> {
+                                        // For M3U playlists, go directly to channel list
+                                        navigator.push(ChannelListScreen(playlist))
+                                    }
+                                }
+                            },
+                            onEdit = {
+                                playlistToRename = playlist
+                            }
+                        )
                     }
                 }
             }
@@ -75,17 +105,67 @@ class PlaylistScreen : Screen {
                     }
                 )
             }
+            
+            playlistToRename?.let { playlist ->
+                RenamePlaylistDialog(
+                    playlist = playlist,
+                    onDismiss = { playlistToRename = null },
+                    onConfirm = { newName ->
+                        screenModel.renamePlaylist(playlist.id, newName)
+                        playlistToRename = null
+                    }
+                )
+            }
         }
     }
 }
 
 @Composable
-fun PlaylistRow(playlist: Playlist, onClick: () -> Unit) {
-    Card(modifier = Modifier.fillMaxWidth().padding(8.dp).clickable(onClick = onClick)) {
-        Column(modifier = Modifier.padding(16.dp)) {
-            Text(text = playlist.name, style = MaterialTheme.typography.h6)
-            Text(text = "${playlist.channels.size} Channels", style = MaterialTheme.typography.body2)
-            Text(text = playlist.type.name, style = MaterialTheme.typography.caption)
+fun PlaylistRow(
+    playlist: Playlist,
+    onClick: () -> Unit,
+    onEdit: () -> Unit
+) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(8.dp)
+            .clickable(onClick = onClick)
+    ) {
+        Row(
+            modifier = Modifier.padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            // Type icon
+            Icon(
+                imageVector = playlist.type.getIcon(),
+                contentDescription = playlist.type.getDisplayName(),
+                modifier = Modifier.size(40.dp)
+            )
+            
+            Spacer(modifier = Modifier.width(16.dp))
+            
+            // Playlist info
+            Column(modifier = Modifier.weight(1f)) {
+                Text(text = playlist.name, style = MaterialTheme.typography.h6)
+                Text(
+                    text = "${playlist.channels.size} Channels",
+                    style = MaterialTheme.typography.body2
+                )
+                Text(
+                    text = playlist.type.getDisplayName(),
+                    style = MaterialTheme.typography.caption,
+                    color = MaterialTheme.colors.onSurface.copy(alpha = 0.6f)
+                )
+            }
+            
+            // Edit button
+            IconButton(onClick = onEdit) {
+                Icon(
+                    imageVector = Icons.Default.Edit,
+                    contentDescription = "重命名播放列表"
+                )
+            }
         }
     }
 }
@@ -181,6 +261,17 @@ class PlaylistScreenModel(private val repository: PlaylistRepository) : ScreenMo
             } catch (e: Exception) {
                 // TODO: Show error to user
                 println("Error adding Xtream: ${e.message}")
+            }
+        }
+    }
+    
+    fun renamePlaylist(playlistId: String, newName: String) {
+        screenModelScope.launch {
+            try {
+                repository.renamePlaylist(playlistId, newName)
+            } catch (e: Exception) {
+                // TODO: Show error to user
+                println("Error renaming playlist: ${e.message}")
             }
         }
     }

@@ -36,21 +36,34 @@ import kotlinx.coroutines.launch
 import org.koin.compose.koinInject
 import kotlinx.coroutines.flow.SharingStarted
 
-data class ChannelListScreen(val playlist: Playlist) : Screen {
+data class ChannelListScreen(
+    val playlist: Playlist,
+    val categoryId: String? = null
+) : Screen {
     @Composable
     override fun Content() {
         val navigator = LocalNavigator.currentOrThrow
         val favoriteRepository: FavoriteRepository = koinInject()
-        val screenModel = remember { ChannelListScreenModel(playlist, favoriteRepository) }
+        val playlistRepository: com.menmapro.iptv.data.repository.PlaylistRepository = koinInject()
+        val screenModel = remember { ChannelListScreenModel(playlist, categoryId, favoriteRepository, playlistRepository) }
         
         val filteredChannels by screenModel.filteredChannels.collectAsState()
         val searchQuery by screenModel.searchQuery.collectAsState()
         val selectedCategory by screenModel.selectedCategory.collectAsState()
+        val categoryName by screenModel.categoryName.collectAsState()
 
         Scaffold(
             topBar = {
                 TopAppBar(
-                    title = { Text(playlist.name) },
+                    title = { 
+                        Text(
+                            if (categoryId != null && categoryName != null) {
+                                "$categoryName - ${playlist.name}"
+                            } else {
+                                playlist.name
+                            }
+                        ) 
+                    },
                     navigationIcon = {
                         IconButton(onClick = { navigator.pop() }) {
                             Icon(Icons.Default.ArrowBack, contentDescription = "返回")
@@ -178,7 +191,9 @@ fun ChannelRow(
 
 class ChannelListScreenModel(
     private val playlist: Playlist,
-    private val favoriteRepository: FavoriteRepository
+    private val categoryId: String?,
+    private val favoriteRepository: FavoriteRepository,
+    private val playlistRepository: com.menmapro.iptv.data.repository.PlaylistRepository
 ) : ScreenModel {
     private val favoriteStates = mutableMapOf<String, MutableStateFlow<Boolean>>()
     
@@ -188,14 +203,47 @@ class ChannelListScreenModel(
     private val _selectedCategory = MutableStateFlow<Category?>(null)
     val selectedCategory: StateFlow<Category?> = _selectedCategory
     
+    private val _categoryName = MutableStateFlow<String?>(null)
+    val categoryName: StateFlow<String?> = _categoryName
+    
+    private val _channelsFromCategory = MutableStateFlow<List<Channel>>(emptyList())
+    
+    init {
+        // If categoryId is provided, load channels for that category
+        if (categoryId != null) {
+            screenModelScope.launch {
+                try {
+                    val channels = playlistRepository.getChannelsByCategory(playlist.id, categoryId)
+                    _channelsFromCategory.value = channels
+                    
+                    // Find category name from playlist categories
+                    val category = playlist.categories.find { it.id == categoryId }
+                    _categoryName.value = category?.name
+                } catch (e: Exception) {
+                    println("Error loading channels for category: ${e.message}")
+                    _channelsFromCategory.value = emptyList()
+                }
+            }
+        } else {
+            _channelsFromCategory.value = playlist.channels
+        }
+    }
+    
     val filteredChannels: StateFlow<List<Channel>> = combine(
         _searchQuery,
-        _selectedCategory
-    ) { query, category ->
-        var result = playlist.channels
+        _selectedCategory,
+        _channelsFromCategory
+    ) { query, category, channelsFromCategory ->
+        var result = if (categoryId != null) {
+            // When viewing a specific category, use channels from that category
+            channelsFromCategory
+        } else {
+            // When viewing all channels, use playlist channels
+            playlist.channels
+        }
         
-        // 分类过滤
-        if (category != null) {
+        // 分类过滤 (only when no categoryId is set, for the tab filtering)
+        if (categoryId == null && category != null) {
             result = result.filter { it.group == category.name }
         }
         
@@ -210,7 +258,7 @@ class ChannelListScreenModel(
     }.stateIn(
         scope = screenModelScope,
         started = SharingStarted.WhileSubscribed(5000),
-        initialValue = playlist.channels
+        initialValue = if (categoryId != null) emptyList() else playlist.channels
     )
     
     fun updateSearchQuery(query: String) {
