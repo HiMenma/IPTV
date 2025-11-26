@@ -14,6 +14,15 @@ class MainActivity : ComponentActivity() {
         initKoin {
             androidContext(this@MainActivity)
         }
+        
+        // Initialize FileManager with activity
+        try {
+            val fileManager = org.koin.core.context.GlobalContext.get().get<com.menmapro.iptv.platform.FileManager>()
+            fileManager.setActivity(this)
+        } catch (e: Exception) {
+            println("Error initializing FileManager: ${e.message}")
+        }
+        
         setContent {
             App()
         }

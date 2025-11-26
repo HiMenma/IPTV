@@ -143,7 +143,7 @@ data class PlayerScreen(val channel: Channel) : Screen {
                         }
                     }
                     
-                    // Fullscreen button with auto-hide
+                    // Fullscreen controls
                     if (!showErrorScreen) {
                         var showControls by remember { mutableStateOf(true) }
                         var lastInteractionTime by remember { mutableStateOf(System.currentTimeMillis()) }
@@ -160,25 +160,38 @@ data class PlayerScreen(val channel: Channel) : Screen {
                             }
                         }
                         
-                        // Show controls on tap
-                        Box(
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .clickable(
-                                    indication = null,
-                                    interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
-                                ) {
-                                    if (isFullscreen) {
-                                        showControls = true
-                                        lastInteractionTime = System.currentTimeMillis()
+                        if (isFullscreen) {
+                            // 使用增强的全屏控制（仅Android）
+                            FullscreenControlsWrapper(
+                                playerState = playerState.value,
+                                playerControls = playerControls,
+                                showControls = showControls,
+                                onToggleControls = {
+                                    showControls = true
+                                    lastInteractionTime = System.currentTimeMillis()
+                                },
+                                onExitFullscreen = {
+                                    playerControls?.toggleFullscreen()
+                                    isFullscreen = false
+                                },
+                                modifier = Modifier.fillMaxSize()
+                            )
+                        } else {
+                            // 非全屏模式：显示简单的全屏按钮
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .clickable(
+                                        indication = null,
+                                        interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
+                                    ) {
+                                        // 点击切换控制显示
                                     }
-                                }
-                        ) {
-                            if (showControls || !isFullscreen) {
+                            ) {
                                 Button(
                                     onClick = { 
                                         playerControls?.toggleFullscreen()
-                                        isFullscreen = !isFullscreen
+                                        isFullscreen = true
                                         lastInteractionTime = System.currentTimeMillis()
                                     },
                                     modifier = Modifier
@@ -190,7 +203,7 @@ data class PlayerScreen(val channel: Channel) : Screen {
                                     )
                                 ) {
                                     Text(
-                                        text = if (isFullscreen) "退出全屏" else "全屏",
+                                        text = "全屏",
                                         color = Color.White
                                     )
                                 }
