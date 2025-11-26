@@ -18,9 +18,36 @@ actual fun VideoPlayer(
     playerState: MutableState<PlayerState>,
     onPlayerControls: (PlayerControls) -> Unit,
     onError: (String) -> Unit,
-    onPlayerInitFailed: () -> Unit
+    onPlayerInitFailed: () -> Unit,
+    isFullscreen: Boolean
 ) {
     val context = LocalContext.current
+    
+    // Handle screen orientation for fullscreen
+    DisposableEffect(isFullscreen) {
+        val activity = context as? android.app.Activity
+        if (activity != null) {
+            if (isFullscreen) {
+                // Set landscape orientation and hide system UI
+                activity.requestedOrientation = android.content.pm.ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
+                activity.window.decorView.systemUiVisibility = (
+                    android.view.View.SYSTEM_UI_FLAG_FULLSCREEN or
+                    android.view.View.SYSTEM_UI_FLAG_HIDE_NAVIGATION or
+                    android.view.View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
+                )
+            } else {
+                // Restore portrait orientation and show system UI
+                activity.requestedOrientation = android.content.pm.ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
+                activity.window.decorView.systemUiVisibility = android.view.View.SYSTEM_UI_FLAG_VISIBLE
+            }
+        }
+        
+        onDispose {
+            // Restore default orientation when leaving
+            activity?.requestedOrientation = android.content.pm.ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+            activity?.window?.decorView?.systemUiVisibility = android.view.View.SYSTEM_UI_FLAG_VISIBLE
+        }
+    }
     
     // Track if player is released
     val isReleased = remember { mutableStateOf(false) }
@@ -356,12 +383,20 @@ actual fun VideoPlayer(
             factory = { ctx ->
                 PlayerView(ctx).apply {
                     player = exoPlayer
-                    useController = true
+                    useController = !isFullscreen // Hide controls in fullscreen
+                    controllerAutoShow = !isFullscreen
+                    controllerHideOnTouch = isFullscreen
                     layoutParams = ViewGroup.LayoutParams(
                         ViewGroup.LayoutParams.MATCH_PARENT,
                         ViewGroup.LayoutParams.MATCH_PARENT
                     )
                 }
+            },
+            update = { playerView ->
+                // Update controller visibility when fullscreen state changes
+                playerView.useController = !isFullscreen
+                playerView.controllerAutoShow = !isFullscreen
+                playerView.controllerHideOnTouch = isFullscreen
             },
             modifier = modifier
         )

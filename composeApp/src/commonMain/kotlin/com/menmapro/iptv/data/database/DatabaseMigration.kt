@@ -12,7 +12,7 @@ import kotlinx.coroutines.flow.first
  * Handles schema version upgrades and data migrations
  */
 object DatabaseMigration {
-    private const val CURRENT_VERSION = 2
+    private const val CURRENT_VERSION = 3
     private const val VERSION_KEY = "db_version"
     
     private fun logInfo(message: String) {
@@ -68,8 +68,8 @@ object DatabaseMigration {
         for (version in (fromVersion + 1)..toVersion) {
             when (version) {
                 2 -> migrateV1ToV2(driver)
+                3 -> migrateV2ToV3(driver)
                 // Future migrations can be added here
-                // 3 -> migrateV2ToV3(driver)
                 else -> logInfo("No migration script for version $version")
             }
         }
@@ -121,6 +121,71 @@ object DatabaseMigration {
                 logInfo("Column categoryId already exists (duplicate column error). Migration skipped.")
             } else {
                 logError("Failed to execute migration v1 → v2", e)
+                throw e
+            }
+        }
+    }
+    
+    /**
+     * Migration from version 2 to version 3
+     * Adds Xtream account fields to Playlist table
+     */
+    private fun migrateV2ToV3(driver: SqlDriver) {
+        logInfo("Executing migration v2 → v3: Adding Xtream account fields to Playlist table")
+        
+        try {
+            // Check if columns already exist
+            val hasColumns = try {
+                driver.executeQuery(
+                    identifier = null,
+                    sql = "SELECT xtreamServerUrl, xtreamUsername, xtreamPassword FROM Playlist LIMIT 0",
+                    mapper = { cursor -> 
+                        app.cash.sqldelight.db.QueryResult.Value(cursor)
+                    },
+                    parameters = 0,
+                    binders = null
+                )
+                true
+            } catch (e: Exception) {
+                false
+            }
+            
+            if (hasColumns) {
+                logInfo("Xtream account columns already exist in Playlist table. Skipping migration.")
+                return
+            }
+            
+            // Add Xtream account columns
+            driver.execute(
+                identifier = null,
+                sql = "ALTER TABLE Playlist ADD COLUMN xtreamServerUrl TEXT",
+                parameters = 0,
+                binders = null
+            )
+            
+            driver.execute(
+                identifier = null,
+                sql = "ALTER TABLE Playlist ADD COLUMN xtreamUsername TEXT",
+                parameters = 0,
+                binders = null
+            )
+            
+            driver.execute(
+                identifier = null,
+                sql = "ALTER TABLE Playlist ADD COLUMN xtreamPassword TEXT",
+                parameters = 0,
+                binders = null
+            )
+            
+            logInfo("✓ Successfully added Xtream account columns to Playlist table")
+            
+        } catch (e: Exception) {
+            // If the columns already exist, SQLite will throw an error
+            // We can safely ignore this error
+            if (e.message?.contains("duplicate column") == true) {
+                logInfo("Xtream account columns already exist (duplicate column error). Migration skipped.")
+            } else {
+                logError("Failed to execute migration v2 → v3", e)
                 throw e
             }
         }

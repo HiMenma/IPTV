@@ -170,7 +170,8 @@ actual fun VideoPlayer(
     playerState: MutableState<PlayerState>,
     onPlayerControls: (PlayerControls) -> Unit,
     onError: (String) -> Unit,
-    onPlayerInitFailed: () -> Unit
+    onPlayerInitFailed: () -> Unit,
+    isFullscreen: Boolean
 ) {
     // Check VLC availability first
     val vlcAvailable = remember { VlcAvailabilityChecker.isVlcAvailable() }

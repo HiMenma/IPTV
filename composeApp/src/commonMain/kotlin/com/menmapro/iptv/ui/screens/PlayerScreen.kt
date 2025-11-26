@@ -1,6 +1,7 @@
 package com.menmapro.iptv.ui.screens
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.*
 import androidx.compose.material.icons.Icons
@@ -116,7 +117,8 @@ data class PlayerScreen(val channel: Channel) : Screen {
                             // Handle player initialization failure
                             showErrorScreen = true
                             errorMessage = errorMessage ?: "播放器初始化失败"
-                        }
+                        },
+                        isFullscreen = isFullscreen
                     )
                     
                     // Loading overlay
@@ -141,25 +143,58 @@ data class PlayerScreen(val channel: Channel) : Screen {
                         }
                     }
                     
-                    // Fullscreen button
+                    // Fullscreen button with auto-hide
                     if (!showErrorScreen) {
-                        Button(
-                            onClick = { 
-                                playerControls?.toggleFullscreen()
-                                isFullscreen = !isFullscreen
-                            },
+                        var showControls by remember { mutableStateOf(true) }
+                        var lastInteractionTime by remember { mutableStateOf(System.currentTimeMillis()) }
+                        
+                        // Auto-hide controls after 3 seconds in fullscreen
+                        LaunchedEffect(isFullscreen, lastInteractionTime) {
+                            if (isFullscreen) {
+                                kotlinx.coroutines.delay(3000)
+                                if (System.currentTimeMillis() - lastInteractionTime >= 3000) {
+                                    showControls = false
+                                }
+                            } else {
+                                showControls = true
+                            }
+                        }
+                        
+                        // Show controls on tap
+                        Box(
                             modifier = Modifier
-                                .align(Alignment.TopEnd)
-                                .padding(16.dp)
-                                .alpha(0.7f),
-                            colors = ButtonDefaults.buttonColors(
-                                backgroundColor = Color.Black.copy(alpha = 0.5f)
-                            )
+                                .fillMaxSize()
+                                .clickable(
+                                    indication = null,
+                                    interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
+                                ) {
+                                    if (isFullscreen) {
+                                        showControls = true
+                                        lastInteractionTime = System.currentTimeMillis()
+                                    }
+                                }
                         ) {
-                            Text(
-                                text = if (isFullscreen) "退出全屏" else "全屏",
-                                color = Color.White
-                            )
+                            if (showControls || !isFullscreen) {
+                                Button(
+                                    onClick = { 
+                                        playerControls?.toggleFullscreen()
+                                        isFullscreen = !isFullscreen
+                                        lastInteractionTime = System.currentTimeMillis()
+                                    },
+                                    modifier = Modifier
+                                        .align(Alignment.TopEnd)
+                                        .padding(16.dp)
+                                        .alpha(0.7f),
+                                    colors = ButtonDefaults.buttonColors(
+                                        backgroundColor = Color.Black.copy(alpha = 0.5f)
+                                    )
+                                ) {
+                                    Text(
+                                        text = if (isFullscreen) "退出全屏" else "全屏",
+                                        color = Color.White
+                                    )
+                                }
+                            }
                         }
                     }
                 }

@@ -186,7 +186,8 @@ class PlaylistRepository(
                     name = name,
                     type = PlaylistType.XTREAM,
                     channels = channelsWithCategoryNames,
-                    categories = categories
+                    categories = categories,
+                    xtreamAccount = account
                 )
                 
                 logInfo("Saving Xtream playlist to database: id='${playlist.id}'")
@@ -352,11 +353,12 @@ class PlaylistRepository(
                     addM3uUrl(playlist.name, playlist.url)
                 }
                 PlaylistType.XTREAM -> {
-                    // For Xtream, we need to get the account info from the playlist ID
-                    // Since we don't store account credentials separately, we can't refresh
-                    // This is a limitation that would require database schema changes
-                    logError("Xtream playlist refresh not supported without stored credentials: id='$playlistId'")
-                    throw Exception("Xtream播放列表刷新功能暂不支持，需要重新添加")
+                    if (playlist.xtreamAccount == null) {
+                        logError("Xtream account info not found: id='$playlistId'")
+                        throw Exception("Xtream账户信息不存在，无法刷新")
+                    }
+                    logInfo("Refreshing Xtream playlist: server='${playlist.xtreamAccount.serverUrl}'")
+                    addXtreamAccount(playlist.name, playlist.xtreamAccount)
                 }
                 PlaylistType.M3U_FILE -> {
                     logError("M3U_FILE playlist cannot be refreshed: id='$playlistId'")
@@ -368,6 +370,53 @@ class PlaylistRepository(
         } catch (e: Exception) {
             logError("Failed to refresh playlist: id='$playlistId'", e)
             throw Exception("刷新播放列表失败: ${e.message ?: "Unknown error"}", e)
+        }
+    }
+    
+    suspend fun exportPlaylistToM3u(playlistId: String): String {
+        logInfo("Exporting playlist to M3U: id='$playlistId'")
+        try {
+            val playlist = getPlaylistById(playlistId)
+            if (playlist == null) {
+                logError("Playlist not found when exporting: id='$playlistId'")
+                throw Exception("播放列表不存在")
+            }
+            
+            val m3uContent = buildString {
+                appendLine("#EXTM3U")
+                
+                playlist.channels.forEach { channel ->
+                    // Build EXTINF line with metadata
+                    append("#EXTINF:-1")
+                    
+                    // Add tvg-id if available
+                    if (!channel.id.isNullOrBlank()) {
+                        append(" tvg-id=\"${channel.id}\"")
+                    }
+                    
+                    // Add tvg-logo if available
+                    if (!channel.logoUrl.isNullOrBlank()) {
+                        append(" tvg-logo=\"${channel.logoUrl}\"")
+                    }
+                    
+                    // Add group-title if available
+                    if (!channel.group.isNullOrBlank()) {
+                        append(" group-title=\"${channel.group}\"")
+                    }
+                    
+                    // Add channel name
+                    appendLine(",${channel.name}")
+                    
+                    // Add channel URL
+                    appendLine(channel.url)
+                }
+            }
+            
+            logInfo("Successfully exported playlist to M3U: id='$playlistId', channels=${playlist.channels.size}")
+            return m3uContent
+        } catch (e: Exception) {
+            logError("Failed to export playlist to M3U: id='$playlistId'", e)
+            throw Exception("导出M3U文件失败: ${e.message ?: "Unknown error"}", e)
         }
     }
 }

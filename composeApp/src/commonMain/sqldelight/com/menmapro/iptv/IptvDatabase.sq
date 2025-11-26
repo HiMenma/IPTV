@@ -5,7 +5,10 @@ CREATE TABLE IF NOT EXISTS Playlist (
     url TEXT,
     type TEXT NOT NULL,
     createdAt INTEGER NOT NULL,
-    updatedAt INTEGER NOT NULL
+    updatedAt INTEGER NOT NULL,
+    xtreamServerUrl TEXT,
+    xtreamUsername TEXT,
+    xtreamPassword TEXT
 );
 
 -- Channel table
@@ -58,8 +61,8 @@ selectPlaylistById:
 SELECT * FROM Playlist WHERE id = ?;
 
 insertPlaylist:
-INSERT OR REPLACE INTO Playlist(id, name, url, type, createdAt, updatedAt)
-VALUES (?, ?, ?, ?, ?, ?);
+INSERT OR REPLACE INTO Playlist(id, name, url, type, createdAt, updatedAt, xtreamServerUrl, xtreamUsername, xtreamPassword)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);
 
 deletePlaylist:
 DELETE FROM Playlist WHERE id = ?;

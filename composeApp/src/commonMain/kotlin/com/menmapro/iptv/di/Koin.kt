@@ -75,6 +75,9 @@ val appModule = module {
     single { M3uParser() }
     single { XtreamClient(get()) }
 
+    // Platform-specific components
+    single { com.menmapro.iptv.platform.FileManager() }
+    
     // Repositories
     single { 
         PlaylistRepository(
@@ -87,7 +90,7 @@ val appModule = module {
     single { FavoriteRepository(get()) }
 
     // ViewModels/ScreenModels
-    factory { PlaylistScreenModel(get()) }
+    factory { PlaylistScreenModel(get(), get()) }
     factory { FavoriteScreenModel(get()) }
 }
 

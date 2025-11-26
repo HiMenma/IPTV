@@ -37,12 +37,23 @@ class PlaylistDao(private val database: IptvDatabase) {
                 playlists.map { dbPlaylist ->
                     try {
                         val channels = getChannelsByPlaylistId(dbPlaylist.id)
+                        val xtreamAccount = if (dbPlaylist.xtreamServerUrl != null && 
+                            dbPlaylist.xtreamUsername != null && 
+                            dbPlaylist.xtreamPassword != null) {
+                            com.menmapro.iptv.data.model.XtreamAccount(
+                                serverUrl = dbPlaylist.xtreamServerUrl,
+                                username = dbPlaylist.xtreamUsername,
+                                password = dbPlaylist.xtreamPassword
+                            )
+                        } else null
+                        
                         Playlist(
                             id = dbPlaylist.id,
                             name = dbPlaylist.name,
                             url = dbPlaylist.url,
                             type = PlaylistType.valueOf(dbPlaylist.type),
-                            channels = channels
+                            channels = channels,
+                            xtreamAccount = xtreamAccount
                         )
                     } catch (e: Exception) {
                         logError("Failed to map playlist: id='${dbPlaylist.id}', name='${dbPlaylist.name}'", e)
@@ -66,13 +77,24 @@ class PlaylistDao(private val database: IptvDatabase) {
                 }
             
             val channels = getChannelsByPlaylistId(id)
+            val xtreamAccount = if (dbPlaylist.xtreamServerUrl != null && 
+                dbPlaylist.xtreamUsername != null && 
+                dbPlaylist.xtreamPassword != null) {
+                com.menmapro.iptv.data.model.XtreamAccount(
+                    serverUrl = dbPlaylist.xtreamServerUrl,
+                    username = dbPlaylist.xtreamUsername,
+                    password = dbPlaylist.xtreamPassword
+                )
+            } else null
+            
             logInfo("Successfully fetched playlist: id='$id', name='${dbPlaylist.name}', channels=${channels.size}")
             Playlist(
                 id = dbPlaylist.id,
                 name = dbPlaylist.name,
                 url = dbPlaylist.url,
                 type = PlaylistType.valueOf(dbPlaylist.type),
-                channels = channels
+                channels = channels,
+                xtreamAccount = xtreamAccount
             )
         } catch (e: Exception) {
             logError("Failed to fetch playlist by id: '$id'", e)
@@ -94,7 +116,10 @@ class PlaylistDao(private val database: IptvDatabase) {
                     url = playlist.url,
                     type = playlist.type.name,
                     createdAt = currentTime,
-                    updatedAt = currentTime
+                    updatedAt = currentTime,
+                    xtreamServerUrl = playlist.xtreamAccount?.serverUrl,
+                    xtreamUsername = playlist.xtreamAccount?.username,
+                    xtreamPassword = playlist.xtreamAccount?.password
                 )
                 
                 // Delete old channels for this playlist

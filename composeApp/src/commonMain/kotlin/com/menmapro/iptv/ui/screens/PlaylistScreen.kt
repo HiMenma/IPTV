@@ -105,6 +105,21 @@ class PlaylistScreen : Screen {
                                         errorMessage = error
                                     }
                                 )
+                            },
+                            onExport = {
+                                isLoading = true
+                                loadingMessage = "正在导出M3U文件..."
+                                screenModel.exportPlaylist(
+                                    playlistId = playlist.id,
+                                    playlistName = playlist.name,
+                                    onSuccess = {
+                                        isLoading = false
+                                    },
+                                    onError = { error ->
+                                        isLoading = false
+                                        errorMessage = error
+                                    }
+                                )
                             }
                         )
                     }
@@ -139,6 +154,21 @@ class PlaylistScreen : Screen {
                             url = url,
                             user = user,
                             pass = pass,
+                            onSuccess = {
+                                isLoading = false
+                            },
+                            onError = { error ->
+                                isLoading = false
+                                errorMessage = error
+                            }
+                        )
+                    },
+                    onAddM3uFile = { name ->
+                        isLoading = true
+                        loadingMessage = "正在读取M3U文件..."
+                        showAddDialog = false
+                        screenModel.pickAndAddM3uFile(
+                            name = name,
                             onSuccess = {
                                 isLoading = false
                             },
@@ -187,8 +217,11 @@ fun PlaylistRow(
     playlist: Playlist,
     onClick: () -> Unit,
     onEdit: () -> Unit,
-    onRefresh: () -> Unit
+    onRefresh: () -> Unit,
+    onExport: () -> Unit = {}
 ) {
+    var showMenu by remember { mutableStateOf(false) }
+    
     Card(
         modifier = Modifier
             .fillMaxWidth()
@@ -222,23 +255,64 @@ fun PlaylistRow(
                 )
             }
             
-            // Refresh button (only for M3U_URL and XTREAM)
-            if (playlist.type == com.menmapro.iptv.data.model.PlaylistType.M3U_URL ||
-                playlist.type == com.menmapro.iptv.data.model.PlaylistType.XTREAM) {
-                IconButton(onClick = onRefresh) {
+            // More options button
+            Box {
+                IconButton(onClick = { showMenu = true }) {
                     Icon(
-                        imageVector = Icons.Default.Refresh,
-                        contentDescription = "刷新播放列表"
+                        imageVector = Icons.Default.Settings,
+                        contentDescription = "更多选项"
                     )
                 }
-            }
-            
-            // Edit button
-            IconButton(onClick = onEdit) {
-                Icon(
-                    imageVector = Icons.Default.Edit,
-                    contentDescription = "重命名播放列表"
-                )
+                
+                DropdownMenu(
+                    expanded = showMenu,
+                    onDismissRequest = { showMenu = false }
+                ) {
+                    // Refresh option (only for M3U_URL and XTREAM)
+                    if (playlist.type == com.menmapro.iptv.data.model.PlaylistType.M3U_URL ||
+                        playlist.type == com.menmapro.iptv.data.model.PlaylistType.XTREAM) {
+                        DropdownMenuItem(onClick = {
+                            showMenu = false
+                            onRefresh()
+                        }) {
+                            Icon(
+                                imageVector = Icons.Default.Refresh,
+                                contentDescription = null,
+                                modifier = Modifier.size(20.dp)
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("刷新")
+                        }
+                    }
+                    
+                    // Export option
+                    DropdownMenuItem(onClick = {
+                        showMenu = false
+                        onExport()
+                    }) {
+                        Icon(
+                            imageVector = Icons.Default.Add,
+                            contentDescription = null,
+                            modifier = Modifier.size(20.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("导出为M3U")
+                    }
+                    
+                    // Rename option
+                    DropdownMenuItem(onClick = {
+                        showMenu = false
+                        onEdit()
+                    }) {
+                        Icon(
+                            imageVector = Icons.Default.Edit,
+                            contentDescription = null,
+                            modifier = Modifier.size(20.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("重命名")
+                    }
+                }
             }
         }
     }
@@ -248,7 +322,8 @@ fun PlaylistRow(
 fun AddPlaylistDialog(
     onDismiss: () -> Unit,
     onAddM3u: (String, String) -> Unit,
-    onAddXtream: (String, String, String, String) -> Unit
+    onAddXtream: (String, String, String, String) -> Unit,
+    onAddM3uFile: (String) -> Unit = {}
 ) {
     var tabIndex by remember { mutableStateOf(0) }
     var playlistName by remember { mutableStateOf("") }
@@ -264,7 +339,8 @@ fun AddPlaylistDialog(
             Column {
                 TabRow(selectedTabIndex = tabIndex) {
                     Tab(selected = tabIndex == 0, onClick = { tabIndex = 0 }, text = { Text("M3U URL") })
-                    Tab(selected = tabIndex == 1, onClick = { tabIndex = 1 }, text = { Text("Xtream") })
+                    Tab(selected = tabIndex == 1, onClick = { tabIndex = 1 }, text = { Text("本地文件") })
+                    Tab(selected = tabIndex == 2, onClick = { tabIndex = 2 }, text = { Text("Xtream") })
                 }
                 Spacer(modifier = Modifier.height(16.dp))
                 
@@ -278,44 +354,62 @@ fun AddPlaylistDialog(
                 
                 Spacer(modifier = Modifier.height(8.dp))
                 
-                if (tabIndex == 0) {
-                    OutlinedTextField(
-                        value = m3uUrl,
-                        onValueChange = { m3uUrl = it },
-                        label = { Text("M3U URL") },
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                } else {
-                    OutlinedTextField(
-                        value = xtreamUrl,
-                        onValueChange = { xtreamUrl = it },
-                        label = { Text("服务器地址") },
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                    OutlinedTextField(
-                        value = xtreamUser,
-                        onValueChange = { xtreamUser = it },
-                        label = { Text("用户名") },
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                    OutlinedTextField(
-                        value = xtreamPass,
-                        onValueChange = { xtreamPass = it },
-                        label = { Text("密码") },
-                        modifier = Modifier.fillMaxWidth()
-                    )
+                when (tabIndex) {
+                    0 -> {
+                        OutlinedTextField(
+                            value = m3uUrl,
+                            onValueChange = { m3uUrl = it },
+                            label = { Text("M3U URL") },
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    }
+                    1 -> {
+                        Button(
+                            onClick = { onAddM3uFile(playlistName) },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text("选择M3U文件")
+                        }
+                        Text(
+                            text = "点击按钮选择本地M3U文件",
+                            style = MaterialTheme.typography.caption,
+                            color = MaterialTheme.colors.onSurface.copy(alpha = 0.6f),
+                            modifier = Modifier.padding(top = 8.dp)
+                        )
+                    }
+                    2 -> {
+                        OutlinedTextField(
+                            value = xtreamUrl,
+                            onValueChange = { xtreamUrl = it },
+                            label = { Text("服务器地址") },
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                        OutlinedTextField(
+                            value = xtreamUser,
+                            onValueChange = { xtreamUser = it },
+                            label = { Text("用户名") },
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                        OutlinedTextField(
+                            value = xtreamPass,
+                            onValueChange = { xtreamPass = it },
+                            label = { Text("密码") },
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    }
                 }
             }
         },
         confirmButton = {
-            Button(onClick = {
-                if (tabIndex == 0) {
-                    onAddM3u(playlistName, m3uUrl)
-                } else {
-                    onAddXtream(playlistName, xtreamUrl, xtreamUser, xtreamPass)
+            if (tabIndex != 1) {
+                Button(onClick = {
+                    when (tabIndex) {
+                        0 -> onAddM3u(playlistName, m3uUrl)
+                        2 -> onAddXtream(playlistName, xtreamUrl, xtreamUser, xtreamPass)
+                    }
+                }) {
+                    Text("添加")
                 }
-            }) {
-                Text("添加")
             }
         },
         dismissButton = {
@@ -326,7 +420,10 @@ fun AddPlaylistDialog(
     )
 }
 
-class PlaylistScreenModel(private val repository: PlaylistRepository) : ScreenModel {
+class PlaylistScreenModel(
+    private val repository: PlaylistRepository,
+    private val fileManager: com.menmapro.iptv.platform.FileManager
+) : ScreenModel {
     val playlists = repository.getAllPlaylists()
 
     fun addM3uUrl(
@@ -342,6 +439,23 @@ class PlaylistScreenModel(private val repository: PlaylistRepository) : ScreenMo
             } catch (e: Exception) {
                 println("Error adding M3U: ${e.message}")
                 onError(e.message ?: "添加M3U播放列表失败")
+            }
+        }
+    }
+    
+    fun addM3uContent(
+        name: String,
+        content: String,
+        onSuccess: () -> Unit = {},
+        onError: (String) -> Unit = {}
+    ) {
+        screenModelScope.launch {
+            try {
+                repository.addM3uContent(name, content)
+                onSuccess()
+            } catch (e: Exception) {
+                println("Error adding M3U content: ${e.message}")
+                onError(e.message ?: "添加M3U文件失败")
             }
         }
     }
@@ -387,6 +501,49 @@ class PlaylistScreenModel(private val repository: PlaylistRepository) : ScreenMo
             } catch (e: Exception) {
                 println("Error refreshing playlist: ${e.message}")
                 onError(e.message ?: "刷新播放列表失败")
+            }
+        }
+    }
+    
+    fun exportPlaylist(
+        playlistId: String,
+        playlistName: String,
+        onSuccess: () -> Unit = {},
+        onError: (String) -> Unit = {}
+    ) {
+        screenModelScope.launch {
+            try {
+                val m3uContent = repository.exportPlaylistToM3u(playlistId)
+                val success = fileManager.saveM3uFile(playlistName, m3uContent)
+                if (success) {
+                    onSuccess()
+                } else {
+                    onError("用户取消了保存操作")
+                }
+            } catch (e: Exception) {
+                println("Error exporting playlist: ${e.message}")
+                onError(e.message ?: "导出M3U文件失败")
+            }
+        }
+    }
+    
+    fun pickAndAddM3uFile(
+        name: String,
+        onSuccess: () -> Unit = {},
+        onError: (String) -> Unit = {}
+    ) {
+        screenModelScope.launch {
+            try {
+                val content = fileManager.pickM3uFile()
+                if (content != null) {
+                    val playlistName = name.ifBlank { "本地M3U播放列表" }
+                    addM3uContent(playlistName, content, onSuccess, onError)
+                } else {
+                    onError("未选择文件或文件读取失败")
+                }
+            } catch (e: Exception) {
+                println("Error picking M3U file: ${e.message}")
+                onError(e.message ?: "选择文件失败")
             }
         }
     }

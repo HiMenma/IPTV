@@ -20,7 +20,8 @@ data class Playlist(
     val url: String? = null,
     val type: PlaylistType,
     val channels: List<Channel> = emptyList(),
-    val categories: List<Category> = emptyList()
+    val categories: List<Category> = emptyList(),
+    val xtreamAccount: XtreamAccount? = null
 )
 
 enum class PlaylistType {
