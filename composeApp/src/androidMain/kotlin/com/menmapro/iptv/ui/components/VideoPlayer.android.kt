@@ -187,8 +187,18 @@ actual fun VideoPlayer(
                 if (exoPlayer == null || !verifyPlayerState("toggleFullscreen", isReleased, exoPlayer, playerState)) {
                     return
                 }
-                // TODO: Implement fullscreen
-                println("ℹ Fullscreen not yet implemented for Android")
+                try {
+                    // Fullscreen is handled at the PlayerScreen level
+                    // This is just a placeholder for the interface
+                    println("✓ Fullscreen toggle requested")
+                } catch (e: Exception) {
+                    val errorMsg = "全屏切换失败: ${e.message ?: "未知错误"}"
+                    println("✗ Error in toggleFullscreen: $errorMsg")
+                    playerState.value = playerState.value.copy(
+                        errorMessage = errorMsg
+                    )
+                    onError(errorMsg)
+                }
             }
             
             override fun release() {

@@ -9,6 +9,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.FavoriteBorder
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -27,6 +28,7 @@ import com.menmapro.iptv.data.model.getDisplayName
 import com.menmapro.iptv.data.model.getIcon
 import com.menmapro.iptv.data.repository.PlaylistRepository
 import com.menmapro.iptv.ui.components.EmptyView
+import com.menmapro.iptv.ui.components.LoadingDialog
 import com.menmapro.iptv.ui.components.RenamePlaylistDialog
 import kotlinx.coroutines.launch
 
@@ -38,6 +40,9 @@ class PlaylistScreen : Screen {
         val playlists by screenModel.playlists.collectAsState(emptyList())
         var showAddDialog by remember { mutableStateOf(false) }
         var playlistToRename by remember { mutableStateOf<Playlist?>(null) }
+        var isLoading by remember { mutableStateOf(false) }
+        var loadingMessage by remember { mutableStateOf("") }
+        var errorMessage by remember { mutableStateOf<String?>(null) }
 
         Scaffold(
             topBar = { 
@@ -86,6 +91,20 @@ class PlaylistScreen : Screen {
                             },
                             onEdit = {
                                 playlistToRename = playlist
+                            },
+                            onRefresh = {
+                                isLoading = true
+                                loadingMessage = "正在刷新播放列表..."
+                                screenModel.refreshPlaylist(
+                                    playlistId = playlist.id,
+                                    onSuccess = {
+                                        isLoading = false
+                                    },
+                                    onError = { error ->
+                                        isLoading = false
+                                        errorMessage = error
+                                    }
+                                )
                             }
                         )
                     }
@@ -95,13 +114,56 @@ class PlaylistScreen : Screen {
             if (showAddDialog) {
                 AddPlaylistDialog(
                     onDismiss = { showAddDialog = false },
-                    onAddM3u = { url -> 
-                        screenModel.addM3uUrl("New Playlist", url)
+                    onAddM3u = { name, url -> 
+                        isLoading = true
+                        loadingMessage = "正在加载播放列表..."
                         showAddDialog = false
+                        screenModel.addM3uUrl(
+                            name = name.ifBlank { "M3U播放列表" },
+                            url = url,
+                            onSuccess = {
+                                isLoading = false
+                            },
+                            onError = { error ->
+                                isLoading = false
+                                errorMessage = error
+                            }
+                        )
                     },
-                    onAddXtream = { url, user, pass ->
-                        screenModel.addXtream(url, user, pass)
+                    onAddXtream = { name, url, user, pass ->
+                        isLoading = true
+                        loadingMessage = "正在连接Xtream服务器..."
                         showAddDialog = false
+                        screenModel.addXtream(
+                            name = name.ifBlank { url },
+                            url = url,
+                            user = user,
+                            pass = pass,
+                            onSuccess = {
+                                isLoading = false
+                            },
+                            onError = { error ->
+                                isLoading = false
+                                errorMessage = error
+                            }
+                        )
+                    }
+                )
+            }
+            
+            if (isLoading) {
+                LoadingDialog(message = loadingMessage)
+            }
+            
+            errorMessage?.let { error ->
+                AlertDialog(
+                    onDismissRequest = { errorMessage = null },
+                    title = { Text("错误") },
+                    text = { Text(error) },
+                    confirmButton = {
+                        Button(onClick = { errorMessage = null }) {
+                            Text("确定")
+                        }
                     }
                 )
             }
@@ -124,7 +186,8 @@ class PlaylistScreen : Screen {
 fun PlaylistRow(
     playlist: Playlist,
     onClick: () -> Unit,
-    onEdit: () -> Unit
+    onEdit: () -> Unit,
+    onRefresh: () -> Unit
 ) {
     Card(
         modifier = Modifier
@@ -159,6 +222,17 @@ fun PlaylistRow(
                 )
             }
             
+            // Refresh button (only for M3U_URL and XTREAM)
+            if (playlist.type == com.menmapro.iptv.data.model.PlaylistType.M3U_URL ||
+                playlist.type == com.menmapro.iptv.data.model.PlaylistType.XTREAM) {
+                IconButton(onClick = onRefresh) {
+                    Icon(
+                        imageVector = Icons.Default.Refresh,
+                        contentDescription = "刷新播放列表"
+                    )
+                }
+            }
+            
             // Edit button
             IconButton(onClick = onEdit) {
                 Icon(
@@ -173,10 +247,11 @@ fun PlaylistRow(
 @Composable
 fun AddPlaylistDialog(
     onDismiss: () -> Unit,
-    onAddM3u: (String) -> Unit,
-    onAddXtream: (String, String, String) -> Unit
+    onAddM3u: (String, String) -> Unit,
+    onAddXtream: (String, String, String, String) -> Unit
 ) {
     var tabIndex by remember { mutableStateOf(0) }
+    var playlistName by remember { mutableStateOf("") }
     var m3uUrl by remember { mutableStateOf("") }
     var xtreamUrl by remember { mutableStateOf("") }
     var xtreamUser by remember { mutableStateOf("") }
@@ -192,6 +267,17 @@ fun AddPlaylistDialog(
                     Tab(selected = tabIndex == 1, onClick = { tabIndex = 1 }, text = { Text("Xtream") })
                 }
                 Spacer(modifier = Modifier.height(16.dp))
+                
+                // 名称输入字段（通用）
+                OutlinedTextField(
+                    value = playlistName,
+                    onValueChange = { playlistName = it },
+                    label = { Text("播放列表名称（可选）") },
+                    modifier = Modifier.fillMaxWidth()
+                )
+                
+                Spacer(modifier = Modifier.height(8.dp))
+                
                 if (tabIndex == 0) {
                     OutlinedTextField(
                         value = m3uUrl,
@@ -203,19 +289,19 @@ fun AddPlaylistDialog(
                     OutlinedTextField(
                         value = xtreamUrl,
                         onValueChange = { xtreamUrl = it },
-                        label = { Text("Server URL") },
+                        label = { Text("服务器地址") },
                         modifier = Modifier.fillMaxWidth()
                     )
                     OutlinedTextField(
                         value = xtreamUser,
                         onValueChange = { xtreamUser = it },
-                        label = { Text("Username") },
+                        label = { Text("用户名") },
                         modifier = Modifier.fillMaxWidth()
                     )
                     OutlinedTextField(
                         value = xtreamPass,
                         onValueChange = { xtreamPass = it },
-                        label = { Text("Password") },
+                        label = { Text("密码") },
                         modifier = Modifier.fillMaxWidth()
                     )
                 }
@@ -224,17 +310,17 @@ fun AddPlaylistDialog(
         confirmButton = {
             Button(onClick = {
                 if (tabIndex == 0) {
-                    onAddM3u(m3uUrl)
+                    onAddM3u(playlistName, m3uUrl)
                 } else {
-                    onAddXtream(xtreamUrl, xtreamUser, xtreamPass)
+                    onAddXtream(playlistName, xtreamUrl, xtreamUser, xtreamPass)
                 }
             }) {
-                Text("Add")
+                Text("添加")
             }
         },
         dismissButton = {
             TextButton(onClick = onDismiss) {
-                Text("Cancel")
+                Text("取消")
             }
         }
     )
@@ -243,24 +329,38 @@ fun AddPlaylistDialog(
 class PlaylistScreenModel(private val repository: PlaylistRepository) : ScreenModel {
     val playlists = repository.getAllPlaylists()
 
-    fun addM3uUrl(name: String, url: String) {
+    fun addM3uUrl(
+        name: String,
+        url: String,
+        onSuccess: () -> Unit = {},
+        onError: (String) -> Unit = {}
+    ) {
         screenModelScope.launch {
             try {
                 repository.addM3uUrl(name, url)
+                onSuccess()
             } catch (e: Exception) {
-                // TODO: Show error to user
                 println("Error adding M3U: ${e.message}")
+                onError(e.message ?: "添加M3U播放列表失败")
             }
         }
     }
 
-    fun addXtream(url: String, user: String, pass: String) {
+    fun addXtream(
+        name: String,
+        url: String,
+        user: String,
+        pass: String,
+        onSuccess: () -> Unit = {},
+        onError: (String) -> Unit = {}
+    ) {
         screenModelScope.launch {
             try {
-                repository.addXtreamAccount(XtreamAccount(url, user, pass))
+                repository.addXtreamAccount(name, XtreamAccount(url, user, pass))
+                onSuccess()
             } catch (e: Exception) {
-                // TODO: Show error to user
                 println("Error adding Xtream: ${e.message}")
+                onError(e.message ?: "添加Xtream账户失败")
             }
         }
     }
@@ -270,8 +370,23 @@ class PlaylistScreenModel(private val repository: PlaylistRepository) : ScreenMo
             try {
                 repository.renamePlaylist(playlistId, newName)
             } catch (e: Exception) {
-                // TODO: Show error to user
                 println("Error renaming playlist: ${e.message}")
+            }
+        }
+    }
+    
+    fun refreshPlaylist(
+        playlistId: String,
+        onSuccess: () -> Unit = {},
+        onError: (String) -> Unit = {}
+    ) {
+        screenModelScope.launch {
+            try {
+                repository.refreshPlaylist(playlistId)
+                onSuccess()
+            } catch (e: Exception) {
+                println("Error refreshing playlist: ${e.message}")
+                onError(e.message ?: "刷新播放列表失败")
             }
         }
     }

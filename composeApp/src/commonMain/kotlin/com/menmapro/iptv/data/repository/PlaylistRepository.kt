@@ -127,8 +127,8 @@ class PlaylistRepository(
         }
     }
 
-    suspend fun addXtreamAccount(account: XtreamAccount) {
-        logInfo("Starting to add Xtream account: server='${account.serverUrl}', username='${account.username}'")
+    suspend fun addXtreamAccount(name: String, account: XtreamAccount) {
+        logInfo("Starting to add Xtream account: name='$name', server='${account.serverUrl}', username='${account.username}'")
         try {
             // Use retry mechanism for authentication
             val isAuthenticated = retryWithBackoff(
@@ -183,7 +183,7 @@ class PlaylistRepository(
                 
                 val playlist = Playlist(
                     id = account.hashCode().toString(),
-                    name = account.serverUrl,
+                    name = name,
                     type = PlaylistType.XTREAM,
                     channels = channelsWithCategoryNames,
                     categories = categories
@@ -331,6 +331,43 @@ class PlaylistRepository(
         } catch (e: Exception) {
             logError("Failed to fetch category channel counts for playlist: id='$playlistId'", e)
             throw Exception("Failed to fetch category channel counts: ${e.message ?: "Unknown error"}", e)
+        }
+    }
+    
+    suspend fun refreshPlaylist(playlistId: String) {
+        logInfo("Refreshing playlist: id='$playlistId'")
+        try {
+            val playlist = getPlaylistById(playlistId)
+            if (playlist == null) {
+                logError("Playlist not found when refreshing: id='$playlistId'")
+                throw Exception("播放列表不存在")
+            }
+            
+            when (playlist.type) {
+                PlaylistType.M3U_URL -> {
+                    if (playlist.url.isNullOrBlank()) {
+                        throw Exception("播放列表URL为空，无法刷新")
+                    }
+                    logInfo("Refreshing M3U playlist from URL: ${playlist.url}")
+                    addM3uUrl(playlist.name, playlist.url)
+                }
+                PlaylistType.XTREAM -> {
+                    // For Xtream, we need to get the account info from the playlist ID
+                    // Since we don't store account credentials separately, we can't refresh
+                    // This is a limitation that would require database schema changes
+                    logError("Xtream playlist refresh not supported without stored credentials: id='$playlistId'")
+                    throw Exception("Xtream播放列表刷新功能暂不支持，需要重新添加")
+                }
+                PlaylistType.M3U_FILE -> {
+                    logError("M3U_FILE playlist cannot be refreshed: id='$playlistId'")
+                    throw Exception("本地M3U文件无法刷新")
+                }
+            }
+            
+            logInfo("Successfully refreshed playlist: id='$playlistId'")
+        } catch (e: Exception) {
+            logError("Failed to refresh playlist: id='$playlistId'", e)
+            throw Exception("刷新播放列表失败: ${e.message ?: "Unknown error"}", e)
         }
     }
 }

@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.material.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
+import androidx.compose.ui.draw.alpha
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -26,6 +27,7 @@ data class PlayerScreen(val channel: Channel) : Screen {
         var showErrorScreen by remember { mutableStateOf(false) }
         var errorMessage by remember { mutableStateOf<String?>(null) }
         var retryCount by remember { mutableStateOf(0) }
+        var isFullscreen by remember { mutableStateOf(false) }
 
         // Validate URL before attempting to play
         val urlValidationError = remember(channel.url) {
@@ -57,17 +59,19 @@ data class PlayerScreen(val channel: Channel) : Screen {
 
         Scaffold(
             topBar = {
-                TopAppBar(
-                    title = { Text(channel.name) },
-                    navigationIcon = {
-                        IconButton(onClick = { 
-                            playerControls?.release()
-                            navigator.pop()
-                        }) {
-                            Icon(Icons.Default.ArrowBack, contentDescription = "返回")
+                if (!isFullscreen) {
+                    TopAppBar(
+                        title = { Text(channel.name) },
+                        navigationIcon = {
+                            IconButton(onClick = { 
+                                playerControls?.release()
+                                navigator.pop()
+                            }) {
+                                Icon(Icons.Default.ArrowBack, contentDescription = "返回")
+                            }
                         }
-                    }
-                )
+                    )
+                }
             }
         ) { padding ->
             if (showErrorScreen) {
@@ -89,24 +93,76 @@ data class PlayerScreen(val channel: Channel) : Screen {
             } else if (urlValidationError == null) {
                 // Only show VideoPlayer if URL is valid
                 // The VideoPlayer component itself handles errors through playerState
-                VideoPlayer(
-                    url = channel.url,
-                    modifier = Modifier.padding(padding).fillMaxSize(),
-                    playerState = playerState,
-                    onPlayerControls = { controls ->
-                        playerControls = controls
-                    },
-                    onError = { error ->
-                        // Handle error callback
-                        showErrorScreen = true
-                        errorMessage = error
-                    },
-                    onPlayerInitFailed = {
-                        // Handle player initialization failure
-                        showErrorScreen = true
-                        errorMessage = errorMessage ?: "播放器初始化失败"
+                Box(
+                    modifier = if (isFullscreen) {
+                        Modifier.fillMaxSize()
+                    } else {
+                        Modifier.padding(padding).fillMaxSize()
                     }
-                )
+                ) {
+                    VideoPlayer(
+                        url = channel.url,
+                        modifier = Modifier.fillMaxSize(),
+                        playerState = playerState,
+                        onPlayerControls = { controls ->
+                            playerControls = controls
+                        },
+                        onError = { error ->
+                            // Handle error callback
+                            showErrorScreen = true
+                            errorMessage = error
+                        },
+                        onPlayerInitFailed = {
+                            // Handle player initialization failure
+                            showErrorScreen = true
+                            errorMessage = errorMessage ?: "播放器初始化失败"
+                        }
+                    )
+                    
+                    // Loading overlay
+                    if (playerState.value.playbackState == PlaybackState.BUFFERING) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .background(Color.Black.copy(alpha = 0.5f)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Column(
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                verticalArrangement = Arrangement.spacedBy(16.dp)
+                            ) {
+                                CircularProgressIndicator(color = Color.White)
+                                Text(
+                                    text = "正在加载...",
+                                    color = Color.White,
+                                    style = MaterialTheme.typography.body1
+                                )
+                            }
+                        }
+                    }
+                    
+                    // Fullscreen button
+                    if (!showErrorScreen) {
+                        Button(
+                            onClick = { 
+                                playerControls?.toggleFullscreen()
+                                isFullscreen = !isFullscreen
+                            },
+                            modifier = Modifier
+                                .align(Alignment.TopEnd)
+                                .padding(16.dp)
+                                .alpha(0.7f),
+                            colors = ButtonDefaults.buttonColors(
+                                backgroundColor = Color.Black.copy(alpha = 0.5f)
+                            )
+                        ) {
+                            Text(
+                                text = if (isFullscreen) "退出全屏" else "全屏",
+                                color = Color.White
+                            )
+                        }
+                    }
+                }
             }
         }
     }
