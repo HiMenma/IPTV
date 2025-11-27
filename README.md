@@ -1,5 +1,9 @@
 # IPTV Player - 跨平台 IPTV 播放器
 
+[![构建状态](https://github.com/YOUR_USERNAME/IPTV/actions/workflows/build-release.yml/badge.svg)](https://github.com/YOUR_USERNAME/IPTV/actions/workflows/build-release.yml)
+[![最新版本](https://img.shields.io/github/v/release/YOUR_USERNAME/IPTV)](https://github.com/YOUR_USERNAME/IPTV/releases/latest)
+[![下载量](https://img.shields.io/github/downloads/YOUR_USERNAME/IPTV/total)](https://github.com/YOUR_USERNAME/IPTV/releases)
+
 这是一个使用 Kotlin Multiplatform (KMP) 和 Compose Multiplatform 开发的跨平台 IPTV 播放器,支持 Android、macOS 和 Windows。
 
 ## 功能特性
@@ -53,11 +57,43 @@ IPTV/
 └── README.md
 ```
 
-## 快速开始
+## 📥 下载安装
+
+### 从 GitHub Releases 下载
+
+访问 [Releases 页面](https://github.com/YOUR_USERNAME/IPTV/releases/latest) 下载最新版本：
+
+| 平台 | 文件类型 | 说明 |
+|------|---------|------|
+| 🪟 Windows | `.msi` | Windows 安装程序 |
+| 🍎 macOS | `.dmg` | macOS 磁盘映像 |
+| 🐧 Linux | `.deb` | Debian/Ubuntu 安装包 |
+| 🤖 Android | `.apk` | Android 安装包 |
+
+### 安装说明
+
+**Windows**: 双击 `.msi` 文件，按照安装向导操作
+
+**macOS**: 
+1. 打开 `.dmg` 文件
+2. 将应用拖到 Applications 文件夹
+3. 首次运行需要在"系统偏好设置 > 安全性与隐私"中允许
+
+**Linux**: 
+```bash
+sudo dpkg -i iptv-player_1.0.0_amd64.deb
+```
+
+**Android**: 
+1. 下载 `.apk` 文件
+2. 在设备上启用"允许安装未知来源应用"
+3. 打开 APK 文件安装
+
+## 🛠️ 开发构建
 
 ### 前置要求
 
-- **JDK 11+**: 确保已安装 Java 开发工具包
+- **JDK 17+**: 确保已安装 Java 开发工具包
 - **Android SDK**: 用于 Android 构建 (可选,如果只运行 Desktop 版本则不需要)
 - **VLC Media Player**: Desktop 版本需要安装 VLC (macOS/Windows)
 
@@ -92,6 +128,11 @@ cd /Users/menmapro/Documents/GitHub/IPTV
 # Android APK
 ./gradlew :composeApp:assembleRelease
 ```
+
+详细构建说明请参阅：
+- **[本地构建指南](BUILD_PACKAGES.md)** - 本地打包所有平台
+- **[GitHub Actions 自动构建](GITHUB_ACTIONS_GUIDE.md)** - 自动化构建和发布
+- **[快速发布指南](RELEASE_GUIDE.md)** - 一键发布新版本
 
 ## 使用说明
 
