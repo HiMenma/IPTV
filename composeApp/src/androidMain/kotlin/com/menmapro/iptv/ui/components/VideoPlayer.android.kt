@@ -383,9 +383,28 @@ actual fun VideoPlayer(
             factory = { ctx ->
                 PlayerView(ctx).apply {
                     player = exoPlayer
-                    useController = !isFullscreen // Hide controls in fullscreen
-                    controllerAutoShow = !isFullscreen
-                    controllerHideOnTouch = isFullscreen
+                    
+                    // 根据播放状态决定是否显示控制器
+                    val isBuffering = playerState.value.playbackState == PlaybackState.BUFFERING
+                    val isPlaying = playerState.value.playbackState == PlaybackState.PLAYING
+                    
+                    // 加载时不显示控制器
+                    useController = !isBuffering && isPlaying
+                    
+                    // 控制器设置
+                    controllerAutoShow = false // 不自动显示
+                    controllerShowTimeoutMs = 3000 // 3秒后自动隐藏
+                    controllerHideOnTouch = true // 点击空白区域立即隐藏
+                    
+                    // 设置点击监听器，点击视频区域切换控制器显示
+                    setOnClickListener {
+                        if (isControllerFullyVisible) {
+                            hideController()
+                        } else if (isPlaying) {
+                            showController()
+                        }
+                    }
+                    
                     layoutParams = ViewGroup.LayoutParams(
                         ViewGroup.LayoutParams.MATCH_PARENT,
                         ViewGroup.LayoutParams.MATCH_PARENT
@@ -393,10 +412,18 @@ actual fun VideoPlayer(
                 }
             },
             update = { playerView ->
-                // Update controller visibility when fullscreen state changes
-                playerView.useController = !isFullscreen
-                playerView.controllerAutoShow = !isFullscreen
-                playerView.controllerHideOnTouch = isFullscreen
+                // 根据播放状态更新控制器可见性
+                val isBuffering = playerState.value.playbackState == PlaybackState.BUFFERING
+                val isPlaying = playerState.value.playbackState == PlaybackState.PLAYING
+                
+                // 加载时隐藏控制器
+                if (isBuffering) {
+                    playerView.useController = false
+                    playerView.hideController()
+                } else if (isPlaying) {
+                    // 播放时允许显示控制器，但不自动显示
+                    playerView.useController = true
+                }
             },
             modifier = modifier
         )
