@@ -161,10 +161,26 @@ compose.desktop {
         mainClass = "MainKt"
 
         nativeDistributions {
-            targetFormats(TargetFormat.Dmg, TargetFormat.Msi, TargetFormat.Deb)
+            targetFormats(TargetFormat.Dmg, TargetFormat.Msi, TargetFormat.Deb, TargetFormat.Exe)
             packageName = "IPTV-Player"
+            packageVersion = "1.0.0"
+            description = "IPTV Player - 支持M3U和Xtream的跨平台IPTV播放器"
+            copyright = "© 2024 IPTV Player"
+            vendor = "IPTV Player"
+            
             macOS {
                 bundleID = "com.menmapro.iptv"
+                iconFile.set(project.file("src/desktopMain/resources/app_icon.icns"))
+            }
+            
+            windows {
+                iconFile.set(project.file("src/desktopMain/resources/app_icon_windows.png"))
+                menuGroup = "IPTV Player"
+                upgradeUuid = "a1b2c3d4-e5f6-4a5b-8c9d-0e1f2a3b4c5d"
+            }
+            
+            linux {
+                iconFile.set(project.file("src/desktopMain/resources/app_icon.png"))
             }
         }
     }
