@@ -168,20 +168,33 @@ compose.desktop {
             copyright = "© 2024 IPTV Player"
             vendor = "IPTV Player"
             
+            // 包含所有运行时依赖
+            includeAllModules = true
+            
             macOS {
                 bundleID = "com.menmapro.iptv"
                 iconFile.set(project.file("src/desktopMain/resources/app_icon.icns"))
+                // 确保包含 Java SQL 模块
+                modules("java.sql")
             }
             
             windows {
                 iconFile.set(project.file("src/desktopMain/resources/app_icon_windows.png"))
                 menuGroup = "IPTV Player"
                 upgradeUuid = "a1b2c3d4-e5f6-4a5b-8c9d-0e1f2a3b4c5d"
+                // 确保包含 Java SQL 模块
+                modules("java.sql")
             }
             
             linux {
                 iconFile.set(project.file("src/desktopMain/resources/app_icon.png"))
+                // 确保包含 Java SQL 模块
+                modules("java.sql")
             }
+        }
+        
+        buildTypes.release.proguard {
+            isEnabled.set(false)
         }
     }
 }
