@@ -201,6 +201,9 @@ actual fun VideoPlayer(
     // Track listener registration state to ensure proper cleanup
     val listenerRegistered = remember { mutableStateOf(false) }
     
+    // Track if component is ready for playback
+    val componentReady = remember { mutableStateOf(false) }
+    
     val mediaPlayerComponent = remember {
         initializeMediaPlayerWithFallback(onPlayerInitFailed, onError)
     }
@@ -526,7 +529,13 @@ actual fun VideoPlayer(
     }
     
     // Handle URL changes - improved with proper resource cleanup and media options
-    LaunchedEffect(url) {
+    LaunchedEffect(url, componentReady.value) {
+        // Wait for component to be ready
+        if (!componentReady.value) {
+            println("Waiting for component to be ready before loading media...")
+            return@LaunchedEffect
+        }
+        
         // Validate URL first
         if (url.isBlank()) {
             val errorMsg = "无效的播放地址"
@@ -548,6 +557,8 @@ actual fun VideoPlayer(
             onError(errorMsg)
             return@LaunchedEffect
         }
+        
+        println("✓ Component is ready, proceeding with media loading")
         
         // Perform comprehensive pre-check before attempting playback
         // Validates: Requirements 1.1, 2.1, 3.1
@@ -729,6 +740,13 @@ actual fun VideoPlayer(
                         println("  Video surface parent: ${videoSurface.parent?.javaClass?.simpleName ?: "null"}")
                         println("  Video surface visible: ${videoSurface.isVisible}")
                         println("  Video surface size: ${videoSurface.width}x${videoSurface.height}")
+                        
+                        // Mark component as ready after a short delay to ensure it's fully displayed
+                        javax.swing.SwingUtilities.invokeLater {
+                            Thread.sleep(100) // Give Swing time to fully initialize
+                            componentReady.value = true
+                            println("✓ Component marked as ready for playback")
+                        }
                     } catch (e: Exception) {
                         println("⚠️ Error initializing video surface in factory: ${e.message}")
                         e.printStackTrace()
