@@ -1,21 +1,25 @@
 package com.menmapro.iptv.di
 
-import com.menmapro.iptv.player.FFmpegPlayerImplementation
+import com.menmapro.iptv.player.LibmpvPlayerImplementation
 import com.menmapro.iptv.player.PlayerImplementation
 import org.koin.dsl.module
 
 /**
  * Desktop-specific Koin module for player configuration
  * 
- * This module provides FFmpeg player implementation for desktop platforms.
- * VLC support has been removed - FFmpeg is now the only player.
+ * This module provides libmpv player implementation for desktop platforms.
+ * libmpv is now the default player, offering better performance and simpler integration.
+ * 
+ * Requirements:
+ * - 1.1: Use libmpv library for video playback
  */
 actual val desktopPlayerModule = module {
-    // Player Implementation - FFmpeg only
+    // Player Implementation - libmpv as default
     single<PlayerImplementation> {
-        println("=== Initializing FFmpeg Player ===")
-        println("FFmpeg is the default and only player implementation")
-        println("===================================")
-        FFmpegPlayerImplementation()
+        println("=== Initializing libmpv Player ===")
+        println("libmpv is the default player implementation")
+        println("Provides excellent format support and hardware acceleration")
+        println("======================================")
+        LibmpvPlayerImplementation()
     }
 }

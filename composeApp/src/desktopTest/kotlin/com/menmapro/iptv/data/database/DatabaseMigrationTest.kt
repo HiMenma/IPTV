@@ -64,6 +64,16 @@ class DatabaseMigrationTest {
             )
         """.trimIndent(), 0)
         
+        // Create Playlist table (needed for v2->v3 migration)
+        driver.execute(null, """
+            CREATE TABLE IF NOT EXISTS Playlist (
+                id TEXT PRIMARY KEY NOT NULL,
+                name TEXT NOT NULL,
+                url TEXT NOT NULL,
+                type TEXT NOT NULL
+            )
+        """.trimIndent(), 0)
+        
         // Set database version to 1
         dataStore.edit { preferences ->
             preferences[intPreferencesKey("db_version")] = 1
@@ -76,9 +86,9 @@ class DatabaseMigrationTest {
         // Run migration
         DatabaseMigration.migrate(driver, dataStore)
         
-        // Verify version is now 2
+        // Verify version is now 3 (current version)
         val versionAfter = dataStore.data.first()[intPreferencesKey("db_version")]
-        assertEquals(2, versionAfter, "Database version should be 2 after migration")
+        assertEquals(3, versionAfter, "Database version should be 3 after migration")
         
         // Verify categoryId column exists by trying to query it
         val result = driver.executeQuery(
@@ -111,6 +121,16 @@ class DatabaseMigrationTest {
             )
         """.trimIndent(), 0)
         
+        // Create Playlist table (needed for v2->v3 migration)
+        driver.execute(null, """
+            CREATE TABLE IF NOT EXISTS Playlist (
+                id TEXT PRIMARY KEY NOT NULL,
+                name TEXT NOT NULL,
+                url TEXT NOT NULL,
+                type TEXT NOT NULL
+            )
+        """.trimIndent(), 0)
+        
         // Set version to 1
         dataStore.edit { preferences ->
             preferences[intPreferencesKey("db_version")] = 1
@@ -120,9 +140,9 @@ class DatabaseMigrationTest {
         DatabaseMigration.migrate(driver, dataStore)
         DatabaseMigration.migrate(driver, dataStore)
         
-        // Verify version is still 2
+        // Verify version is still 3 (current version)
         val version = dataStore.data.first()[intPreferencesKey("db_version")]
-        assertEquals(2, version, "Database version should be 2 after multiple migrations")
+        assertEquals(3, version, "Database version should be 3 after multiple migrations")
         
         // Verify column still exists
         val result = driver.executeQuery(
@@ -140,7 +160,7 @@ class DatabaseMigrationTest {
     
     @Test
     fun `test migration skips if already at latest version`() = runBlocking {
-        // Create v2 schema (with categoryId)
+        // Create v3 schema (with categoryId and Xtream fields)
         driver.execute(null, """
             CREATE TABLE IF NOT EXISTS Channel (
                 id TEXT PRIMARY KEY NOT NULL,
@@ -156,22 +176,34 @@ class DatabaseMigrationTest {
             )
         """.trimIndent(), 0)
         
-        // Set version to 2
+        driver.execute(null, """
+            CREATE TABLE IF NOT EXISTS Playlist (
+                id TEXT PRIMARY KEY NOT NULL,
+                name TEXT NOT NULL,
+                url TEXT NOT NULL,
+                type TEXT NOT NULL,
+                xtreamServerUrl TEXT,
+                xtreamUsername TEXT,
+                xtreamPassword TEXT
+            )
+        """.trimIndent(), 0)
+        
+        // Set version to 3 (current version)
         dataStore.edit { preferences ->
-            preferences[intPreferencesKey("db_version")] = 2
+            preferences[intPreferencesKey("db_version")] = 3
         }
         
         // Run migration
         DatabaseMigration.migrate(driver, dataStore)
         
-        // Verify version is still 2
+        // Verify version is still 3
         val version = dataStore.data.first()[intPreferencesKey("db_version")]
-        assertEquals(2, version, "Database version should remain 2")
+        assertEquals(3, version, "Database version should remain 3")
     }
     
     @Test
     fun `test migration handles column already exists`() = runBlocking {
-        // Create v2 schema (with categoryId already present)
+        // Create v3 schema (with categoryId and Xtream fields already present)
         driver.execute(null, """
             CREATE TABLE IF NOT EXISTS Channel (
                 id TEXT PRIMARY KEY NOT NULL,
@@ -184,6 +216,18 @@ class DatabaseMigrationTest {
                 tvgName TEXT,
                 epgChannelId TEXT,
                 categoryId TEXT
+            )
+        """.trimIndent(), 0)
+        
+        driver.execute(null, """
+            CREATE TABLE IF NOT EXISTS Playlist (
+                id TEXT PRIMARY KEY NOT NULL,
+                name TEXT NOT NULL,
+                url TEXT NOT NULL,
+                type TEXT NOT NULL,
+                xtreamServerUrl TEXT,
+                xtreamUsername TEXT,
+                xtreamPassword TEXT
             )
         """.trimIndent(), 0)
         
@@ -192,11 +236,11 @@ class DatabaseMigrationTest {
             preferences[intPreferencesKey("db_version")] = 1
         }
         
-        // Run migration - should not fail even though column exists
+        // Run migration - should not fail even though columns exist
         DatabaseMigration.migrate(driver, dataStore)
         
-        // Verify version is updated to 2
+        // Verify version is updated to 3
         val version = dataStore.data.first()[intPreferencesKey("db_version")]
-        assertEquals(2, version, "Database version should be updated to 2")
+        assertEquals(3, version, "Database version should be updated to 3")
     }
 }

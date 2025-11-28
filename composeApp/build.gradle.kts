@@ -88,9 +88,9 @@ kotlin {
                 implementation(libs.kotlinx.coroutines.swing)
                 implementation(libs.ktor.client.okhttp) // Use OkHttp for desktop too or CIO
                 
-                // Video Player - FFmpeg/JavaCV (only player)
-                implementation(libs.javacv.platform)
-                implementation(libs.ffmpeg.platform)
+                // JNA for libmpv bindings
+                implementation(libs.jna)
+                implementation(libs.jna.platform)
                 
                 // Database Driver
                 implementation(libs.sqldelight.sqlite.driver)
@@ -161,7 +161,7 @@ compose.desktop {
     application {
         mainClass = "MainKt"
         
-        // JVM 参数配置 - 优化 FFmpeg 性能
+        // JVM 参数配置
         jvmArgs += listOf(
             "-Xmx2G",                          // 最大堆内存 2GB
             "-Xms512M",                        // 初始堆内存 512MB

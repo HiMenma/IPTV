@@ -3,12 +3,15 @@ package com.menmapro.iptv.di
 import com.menmapro.iptv.data.database.dao.CategoryDao
 import com.menmapro.iptv.data.database.dao.PlaylistDao
 import com.menmapro.iptv.data.repository.PlaylistRepository
+import com.menmapro.iptv.player.PlayerImplementation
+import com.menmapro.iptv.player.PlayerImplementationType
 import com.menmapro.iptv.ui.screens.PlaylistScreenModel
 import org.junit.After
 import org.junit.Before
 import org.junit.Test
 import org.koin.core.context.GlobalContext
 import org.koin.core.context.stopKoin
+import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
@@ -82,5 +85,29 @@ class KoinConfigurationTest {
         // Second initialization should not fail
         initKoin()
         assertTrue(isKoinInitialized(), "Koin should still be initialized")
+    }
+    
+    @Test
+    fun `verify PlayerImplementation is registered as libmpv`() {
+        // Initialize Koin
+        initKoin()
+        
+        // Verify PlayerImplementation can be resolved
+        val playerImplementation = GlobalContext.get().get<PlayerImplementation>()
+        assertNotNull(playerImplementation, "PlayerImplementation should be registered in Koin")
+        
+        // Verify it's the libmpv implementation
+        assertEquals(
+            PlayerImplementationType.LIBMPV,
+            playerImplementation.type,
+            "PlayerImplementation should be libmpv type"
+        )
+        
+        // Verify the name
+        assertEquals(
+            "libmpv Player",
+            playerImplementation.name,
+            "PlayerImplementation name should be 'libmpv Player'"
+        )
     }
 }

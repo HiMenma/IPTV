@@ -57,14 +57,11 @@
 ### 媒体播放
 
 **Desktop 平台**:
-- **JavaCV + FFmpeg 6.0**: 高性能视频播放 (默认)
+- **libmpv**: MPV 媒体播放器库 (默认)
+  - 强大的格式支持
+  - 优秀的性能
   - 硬件加速支持
   - 低延迟直播流
-  - 完整的格式支持
-  
-- **VLCJ**: VLC 播放器集成 (备选)
-  - 成熟稳定
-  - 广泛的格式支持
 
 **Android 平台**:
 - **Media3 (ExoPlayer)**: Google 官方播放器
@@ -100,27 +97,19 @@
 [versions]
 kotlin = "2.0.21"
 compose = "1.7.1"
-javacv = "1.5.9"
-ffmpeg = "6.0-1.5.9"
-vlcj = "4.7.0"
 ktor = "3.0.1"
 koin = "4.0.0"
 media3 = "1.5.0"
+jna = "5.13.0"
 ```
 
 **Desktop 播放器依赖**:
 
-FFmpeg 播放器 (默认,推荐):
+libmpv 播放器 (默认):
 ```kotlin
-// JavaCV 核心库和 FFmpeg 平台特定库
-implementation("org.bytedeco:javacv-platform:1.5.9")
-implementation("org.bytedeco:ffmpeg-platform:6.0-1.5.9")
-```
-
-VLC 播放器 (可选,备选):
-```kotlin
-// VLCJ 库
-implementation("uk.co.caprica:vlcj:4.7.0")
+// JNA 用于调用 libmpv C API
+implementation("net.java.dev.jna:jna:5.13.0")
+implementation("net.java.dev.jna:jna-platform:5.13.0")
 ```
 
 **Android 播放器依赖**:
@@ -225,12 +214,12 @@ sudo dpkg -i iptv-player_1.0.0_amd64.deb
   - Android SDK 34 或更高版本
   - Android Build Tools 34.0.0 或更高版本
   
-- **VLC Media Player**: 仅在使用 VLC 播放器时需要 (Desktop)
-  - macOS: `brew install --cask vlc`
-  - Linux: `sudo apt-get install vlc`
-  - Windows: 从 [VLC 官网](https://www.videolan.org/vlc/) 下载
+- **libmpv**: Desktop 视频播放所需 (推荐安装)
+  - macOS: `brew install mpv`
+  - Linux: `sudo apt-get install libmpv-dev`
+  - Windows: 从 [MPV 官网](https://mpv.io/installation/) 下载
 
-**注意**: FFmpeg 播放器 (默认) 不需要安装任何外部依赖,所有必需的库都通过 Gradle 自动下载。
+**注意**: libmpv 是外部依赖,需要在系统上安装。详细安装指南请参考 [LIBMPV_SETUP_GUIDE.md](LIBMPV_SETUP_GUIDE.md)。
 
 ### 克隆项目
 
@@ -241,27 +230,28 @@ cd IPTV
 
 ### 运行 Desktop 版本
 
+**前置要求**: 确保已安装 libmpv (参考 [LIBMPV_SETUP_GUIDE.md](LIBMPV_SETUP_GUIDE.md))
+
 ```bash
-# 使用 FFmpeg 播放器 (默认)
+# 运行应用 (使用 libmpv 播放器)
 ./gradlew :composeApp:run
-
-# 首次运行会自动下载 JavaCV 和 FFmpeg 依赖 (~200MB)
-# 后续运行会使用缓存的依赖
 ```
 
-**配置播放器类型** (可选):
+**验证 libmpv 安装**:
 
-在 `composeApp/src/desktopMain/kotlin/com/menmapro/iptv/di/DesktopPlayerModule.kt` 中:
+```bash
+# macOS
+ls /opt/homebrew/lib/libmpv.dylib  # Apple Silicon
+ls /usr/local/lib/libmpv.dylib     # Intel
 
-```kotlin
-single<PlayerImplementation> {
-    // 使用 FFmpeg 播放器 (推荐)
-    PlayerFactory.createPlayer(PlayerFactory.PlayerType.FFMPEG)
-    
-    // 或使用 VLC 播放器 (需要安装 VLC)
-    // PlayerFactory.createPlayer(PlayerFactory.PlayerType.VLC)
-}
+# Linux
+ls /usr/lib/x86_64-linux-gnu/libmpv.so
+
+# Windows
+# 检查 libmpv-2.dll 是否在系统 PATH 中
 ```
+
+如果 libmpv 未安装,应用会显示错误消息并提供安装指南。
 
 ### 运行 Android 版本
 
@@ -368,87 +358,94 @@ repackage.bat
 
 ## 🎬 Desktop 播放器
 
-Desktop 版本使用 **FFmpeg 播放器**作为默认播放引擎,提供卓越的性能和低延迟体验。
+Desktop 版本使用 **libmpv 播放器**作为默认播放引擎,提供强大的格式支持和优秀的性能。
 
-### FFmpeg 播放器 (默认,推荐)
+### libmpv 播放器 (默认,推荐)
 
-基于 JavaCV 和 FFmpeg 6.0 的高性能播放器实现。
+基于 MPV 媒体播放器的库形式,通过 JNA 绑定提供 Kotlin 集成。
 
 #### 核心优势
 
-| 特性 | VLC 播放器 | FFmpeg 播放器 | 改进 |
-|------|-----------|--------------|------|
-| 首帧时间 | 500-1000ms | 300-600ms | ⚡ 40% 更快 |
-| CPU 使用率 | 15-25% | 10-20% | 💪 30% 更低 |
-| 内存占用 | 150-200MB | 100-150MB | 📉 30% 更少 |
-| 直播延迟 | 2-3 秒 | 0.5-1 秒 | 🚀 60% 更低 |
-| 外部依赖 | 需要安装 VLC | 无需安装 | ✅ 零依赖 |
+| 特性 | 描述 |
+|------|------|
+| 🎯 **强大的格式支持** | 支持几乎所有主流视频格式和流媒体协议 |
+| ⚡ **优秀的性能** | 高效的解码和渲染,低 CPU 占用 |
+| 🚀 **硬件加速** | 自动检测并使用平台特定的硬件加速 |
+| 📺 **低延迟直播** | 优化的直播流处理,延迟低至 0.5-1 秒 |
+| 🔧 **灵活配置** | 丰富的配置选项,可针对不同场景优化 |
+| 🌍 **跨平台** | 支持 macOS、Linux 和 Windows |
 
 #### 主要特性
 
 - ✅ **硬件加速**: 自动检测并使用平台特定的硬件加速
-  - 🍎 macOS: VideoToolbox (H.264/HEVC)
-  - 🐧 Linux: VAAPI (Intel/AMD) 或 VDPAU (NVIDIA)
-  - 🪟 Windows: DXVA2 或 D3D11VA
+  - 🍎 macOS: VideoToolbox (hwdec=videotoolbox)
+  - 🐧 Linux: VAAPI (hwdec=vaapi) 或 VDPAU (hwdec=vdpau)
+  - 🪟 Windows: D3D11VA (hwdec=d3d11va)
   
-- ✅ **智能缓冲**: 根据流类型自动优化
-  - 直播流: 小缓冲区 (10 帧) 实现低延迟
-  - 点播内容: 大缓冲区 (30 帧) 确保流畅播放
+- ✅ **智能缓冲**: 可配置的缓冲策略
+  - 网络缓存: 150MB 默认
+  - 缓冲时间: 10 秒默认
+  - 预读取: 5 秒默认
   
-- ✅ **音视频同步**: 精确同步机制
-  - 同步误差 < 40ms
-  - 自动调整播放速度
+- ✅ **音视频同步**: libmpv 内置的精确同步
+  - 自动音视频同步
+  - 帧精确的播放控制
   - 智能丢帧策略
   
-- ✅ **自动重连**: 网络中断自动恢复
-  - 指数退避重连策略
-  - 保持播放位置
-  - 最多重试 3 次
+- ✅ **错误处理**: 完善的错误处理和恢复
+  - 详细的错误日志
+  - 自动重试机制
+  - 回退到安全配置
   
-- ✅ **详细诊断**: 完整的监控和诊断
-  - 实时播放统计 (帧率、丢帧数、比特率)
-  - 性能监控 (CPU、内存使用)
-  - 诊断报告生成
-  - 错误日志记录
+- ✅ **播放控制**: 完整的播放控制功能
+  - 播放/暂停/停止
+  - 精确跳转 (Seek)
+  - 音量控制
+  - 位置和时长查询
 
 #### 架构设计
 
-FFmpeg 播放器采用三线程架构,确保高性能和稳定性:
+libmpv 播放器采用事件驱动架构:
 
 ```
 ┌─────────────────────────────────────────────────────────┐
-│                  FFmpegPlayerEngine                      │
+│              LibmpvPlayerImplementation                  │
+│  ┌────────────────────────────────────────────────────┐ │
+│  │         LibmpvVideoPlayer (Compose)                │ │
+│  │  - UI 集成                                         │ │
+│  │  - 生命周期管理                                     │ │
+│  └────────────────────────────────────────────────────┘ │
+└─────────────────────────────────────────────────────────┘
+                          │
+                          ▼
+┌─────────────────────────────────────────────────────────┐
+│                 LibmpvPlayerEngine                       │
 │  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐  │
-│  │ Decoder      │  │ Renderer     │  │ AudioPlayer  │  │
-│  │ Thread       │  │ Thread       │  │ Thread       │  │
+│  │ Event        │  │ Command      │  │ Property     │  │
+│  │ Thread       │  │ Execution    │  │ Management   │  │
 │  │              │  │              │  │              │  │
-│  │ 解码音视频帧  │  │ 渲染视频帧    │  │ 播放音频帧    │  │
-│  │ 填充队列     │  │ 音视频同步    │  │ 更新时钟     │  │
+│  │ 处理 libmpv  │  │ 播放控制     │  │ 状态查询     │  │
+│  │ 事件回调     │  │ 命令执行     │  │ 配置管理     │  │
 │  └──────────────┘  └──────────────┘  └──────────────┘  │
+└─────────────────────────────────────────────────────────┘
+                          │
+                          ▼
+┌─────────────────────────────────────────────────────────┐
+│              LibmpvFrameRenderer                         │
+│  - 视频帧获取                                            │
+│  - 像素格式转换                                          │
+│  - Compose 渲染集成                                      │
+└─────────────────────────────────────────────────────────┘
+                          │
+                          ▼
+┌─────────────────────────────────────────────────────────┐
+│              libmpv C API (JNA Bindings)                 │
 └─────────────────────────────────────────────────────────┘
 ```
 
-### VLC 播放器 (备选)
-
-如果需要使用 VLC 播放器,请先安装 VLC Media Player,然后在配置中切换:
-
-```kotlin
-// composeApp/src/desktopMain/kotlin/com/menmapro/iptv/di/DesktopPlayerModule.kt
-single<PlayerImplementation> {
-    PlayerFactory.createPlayer(PlayerFactory.PlayerType.VLC)
-}
-```
-
-**安装 VLC**:
-- macOS: `brew install --cask vlc`
-- Linux: `sudo apt-get install vlc`
-- Windows: 从 [VLC 官网](https://www.videolan.org/vlc/) 下载
-
-**推荐版本**: VLC 3.0.18 或更高版本
-
 ### 支持的视频格式和协议
 
-FFmpeg 播放器支持几乎所有主流的视频格式和协议:
+libmpv 播放器支持几乎所有主流的视频格式和协议:
 
 **视频编解码器**:
 - ✅ H.264 (AVC) - 推荐,硬件加速支持
@@ -481,254 +478,223 @@ FFmpeg 播放器支持几乎所有主流的视频格式和协议:
 
 ### 播放器配置
 
-#### FFmpeg 播放器配置
+#### libmpv 播放器配置
 
-FFmpeg 播放器内置在应用中,无需额外安装。默认配置已针对大多数场景优化,但您可以根据需要调整:
+libmpv 需要在系统上安装。默认配置已针对大多数场景优化,但您可以根据需要调整。
 
-**基础配置** (在 `FFmpegPlayerEngine` 中):
+**默认配置**:
 
 ```kotlin
-// 默认配置 - 适用于大多数场景
-val engine = FFmpegPlayerEngine(
-    onStateChange = { state -> /* 处理状态变化 */ },
-    onError = { error -> /* 处理错误 */ }
+val DEFAULT_LIBMPV_CONFIG = LibmpvConfiguration(
+    hardwareAcceleration = true,
+    hwdecMethod = "auto",      // 自动选择最佳硬件加速方法
+    videoOutput = "gpu",       // GPU 渲染
+    audioOutput = "auto",      // 自动选择音频输出
+    cacheSize = 150000,        // 150 MB 缓存
+    cacheSecs = 10,            // 10 秒缓冲
+    demuxerReadahead = 5,      // 5 秒预读取
+    networkTimeout = 30,       // 30 秒网络超时
+    userAgent = "IPTV-Player/1.0"
+)
+```
+
+**配置选项说明**:
+
+| 选项 | 说明 | 推荐值 |
+|------|------|--------|
+| `hardwareAcceleration` | 启用硬件加速 | `true` |
+| `hwdecMethod` | 硬件解码方法 | `"auto"` (自动), `"videotoolbox"` (macOS), `"vaapi"` (Linux), `"d3d11va"` (Windows) |
+| `videoOutput` | 视频输出方式 | `"gpu"` (GPU 渲染), `"x11"` (Linux X11) |
+| `audioOutput` | 音频输出方式 | `"auto"` (自动选择) |
+| `cacheSize` | 网络缓存大小 (KB) | `150000` (150 MB) |
+| `cacheSecs` | 缓冲时间 (秒) | `10` (直播流), `30` (点播) |
+| `demuxerReadahead` | 预读取时间 (秒) | `5` |
+| `networkTimeout` | 网络超时 (秒) | `30` |
+
+**自定义配置示例**:
+
+```kotlin
+// 低延迟直播流配置
+val liveStreamConfig = LibmpvConfiguration(
+    hardwareAcceleration = true,
+    hwdecMethod = "auto",
+    videoOutput = "gpu",
+    cacheSize = 50000,         // 减小缓存
+    cacheSecs = 5,             // 减少缓冲时间
+    demuxerReadahead = 2,      // 减少预读取
+    networkTimeout = 15
 )
 
-// 播放视频
-engine.play(url, canvas)
+// 高质量点播配置
+val vodConfig = LibmpvConfiguration(
+    hardwareAcceleration = true,
+    hwdecMethod = "auto",
+    videoOutput = "gpu",
+    cacheSize = 300000,        // 增大缓存
+    cacheSecs = 30,            // 增加缓冲时间
+    demuxerReadahead = 10,     // 增加预读取
+    networkTimeout = 60
+)
 ```
 
-**高级配置** (通过 `FFmpegGrabberConfigurator`):
+**运行时配置**:
 
 ```kotlin
-// 直播流优化
-val configurator = FFmpegGrabberConfigurator()
-configurator.configure(grabber, isLiveStream = true)
-// 结果: 小缓冲区、低延迟、快速启动
-
-// 点播内容优化
-configurator.configure(grabber, isLiveStream = false)
-// 结果: 大缓冲区、更好的质量、更流畅的播放
-```
-
-**硬件加速配置**:
-
-硬件加速默认自动启用。如需手动控制:
-
-```kotlin
-// 检测硬件加速
-val hwAccel = HardwareAccelerationManager.detectHardwareAcceleration()
-println("硬件加速: ${hwAccel.type}, 可用: ${hwAccel.isAvailable}")
-
-// 手动配置硬件加速
-if (hwAccel.isAvailable) {
-    HardwareAccelerationManager.configureHardwareAcceleration(grabber, hwAccel)
-}
-```
-
-**缓冲区配置**:
-
-```kotlin
-// 视频帧队列大小
-private val videoFrameQueue = LinkedBlockingQueue<Frame>(30)  // 默认: 30 帧
-
-// 音频帧队列大小
-private val audioFrameQueue = LinkedBlockingQueue<Frame>(100) // 默认: 100 帧
-
-// 直播流建议: videoFrameQueue(10), audioFrameQueue(50)
-// 点播内容建议: videoFrameQueue(30), audioFrameQueue(100)
-```
-
-**音视频同步配置**:
-
-```kotlin
-// 同步阈值 (默认: 40ms)
-private val syncThreshold = 40L
-
-// 最大同步差异 (默认: 1000ms)
-private val maxSyncDiff = 1000L
-
-// 调整这些值以优化同步效果
+// 在播放器引擎中设置选项
+engine.setOption("hwdec", "auto")
+engine.setOption("vo", "gpu")
+engine.setOption("cache", "yes")
+engine.setOption("cache-secs", "10")
 ```
 
 #### 性能调优建议
 
 **低延迟场景** (直播流):
-- 启用直播流优化
-- 减小缓冲区大小 (10-15 帧)
+- 减小缓存大小 (50-100 MB)
+- 减少缓冲时间 (5-10 秒)
 - 启用硬件加速
-- 使用较小的同步阈值 (20-30ms)
+- 使用 GPU 视频输出
 
 **高质量场景** (点播内容):
-- 禁用直播流优化
-- 增大缓冲区大小 (30-50 帧)
+- 增大缓存大小 (200-300 MB)
+- 增加缓冲时间 (20-30 秒)
 - 启用硬件加速
-- 使用较大的同步阈值 (40-60ms)
+- 使用 GPU 视频输出
 
 **低性能设备**:
 - 禁用硬件加速 (如果不稳定)
-- 减小缓冲区大小
+- 减小缓存大小
 - 降低视频分辨率
-- 监控 CPU 和内存使用
+- 使用软件解码
 
 ### 📚 文档资源
 
-#### FFmpeg 播放器文档
+#### libmpv 播放器文档
 
 **用户指南**:
-- 📖 **[迁移指南](.kiro/specs/ffmpeg-player-migration/MIGRATION_GUIDE.md)** - 从 VLC 迁移到 FFmpeg 的完整指南
-- 🚀 **[快速开始](.kiro/specs/ffmpeg-player-migration/QUICK_START_CONFIGURATION.md)** - 5 分钟快速配置
-- ⚙️ **[配置指南](.kiro/specs/ffmpeg-player-migration/PLAYER_CONFIGURATION_GUIDE.md)** - 播放器配置详解
-- ✅ **[配置验证](.kiro/specs/ffmpeg-player-migration/CONFIGURATION_VERIFICATION.md)** - 验证配置是否正确
+- 🚀 **[libmpv 安装指南](LIBMPV_SETUP_GUIDE.md)** - 平台特定的 libmpv 安装说明
+- 🔧 **[故障排除指南](LIBMPV_SETUP_GUIDE.md#故障排除)** - 常见问题解决方案
+- ⚙️ **[配置选项](LIBMPV_SETUP_GUIDE.md#配置选项)** - libmpv 配置详解
 
 **开发者文档**:
-- 📚 **[API 文档](.kiro/specs/ffmpeg-player-migration/API_DOCUMENTATION.md)** - 完整的 API 参考
-- 🏗️ **[设计文档](.kiro/specs/ffmpeg-player-migration/design.md)** - 架构设计和技术细节
-- 📋 **[需求文档](.kiro/specs/ffmpeg-player-migration/requirements.md)** - 功能需求和验收标准
-
-#### VLC 播放器文档 (备选)
-
-**用户指南**:
-- 🚀 **[快速入门](.kiro/specs/desktop-video-rendering-fix/QUICK_START_GUIDE.md)** - 新用户快速开始
-- 🔧 **[故障排除](.kiro/specs/desktop-video-rendering-fix/VIDEO_TROUBLESHOOTING.md)** - 常见问题解决方案
-- ⚙️ **[VLC 配置](.kiro/specs/desktop-video-rendering-fix/VLC_CONFIGURATION_GUIDE.md)** - VLC 安装和配置详解
-
-**开发者文档**:
-- 📚 **[技术文档](.kiro/specs/desktop-video-rendering-fix/TECHNICAL_DOCUMENTATION.md)** - 开发者技术参考
-- ✅ **[验证清单](.kiro/specs/desktop-video-rendering-fix/VERIFICATION_CHECKLIST.md)** - 功能验证清单
+- 🏗️ **[设计文档](.kiro/specs/libmpv-player-migration/design.md)** - 架构设计和技术细节
+- 📋 **[需求文档](.kiro/specs/libmpv-player-migration/requirements.md)** - 功能需求和验收标准
+- 📝 **[实现计划](.kiro/specs/libmpv-player-migration/tasks.md)** - 实现任务列表
 
 #### 构建和发布文档
 
-- 🔨 **[本地构建指南](BUILD_PACKAGES.md)** - 本地打包所有平台
+- 🔨 **[本地构建指南](BUILD_GUIDE.md)** - 本地打包所有平台
 - 🤖 **[GitHub Actions 指南](GITHUB_ACTIONS_GUIDE.md)** - 自动化构建和发布
 - 🚀 **[发布指南](RELEASE_GUIDE.md)** - 一键发布新版本
 
 ### 🔧 故障排除
 
-#### FFmpeg 播放器常见问题
+#### libmpv 播放器常见问题
 
-详细的故障排除指南: [MIGRATION_GUIDE.md](.kiro/specs/ffmpeg-player-migration/MIGRATION_GUIDE.md#故障排除)
+详细的故障排除指南: [LIBMPV_SETUP_GUIDE.md](LIBMPV_SETUP_GUIDE.md#故障排除)
 
-**1. 播放器初始化失败**
+**1. libmpv 未找到**
+
+症状: 应用提示 "libmpv not found" 或无法初始化
+
+解决方案:
+```bash
+# macOS
+brew install mpv
+
+# 验证安装
+ls /opt/homebrew/lib/libmpv.dylib  # Apple Silicon
+ls /usr/local/lib/libmpv.dylib     # Intel
+
+# Linux
+sudo apt-get install libmpv-dev
+
+# 验证安装
+ls /usr/lib/x86_64-linux-gnu/libmpv.so
+
+# Windows
+# 从 https://mpv.io/installation/ 下载
+# 将 libmpv-2.dll 放到系统 PATH 中
+```
+
+**2. 播放器初始化失败**
 
 症状: 应用启动时崩溃或无法播放视频
 
 解决方案:
 ```bash
+# 检查 libmpv 版本
+mpv --version
+
 # 清理并重新构建
 ./gradlew clean build
-
-# 检查 JavaCV 依赖
-./gradlew :composeApp:dependencies | grep javacv
 
 # 查看详细日志
 ./gradlew :composeApp:run --info
 ```
 
 可能原因:
-- JavaCV 依赖未正确下载 (~200MB)
-- JDK 版本不兼容 (需要 JDK 17+)
-- 平台特定库缺失
+- libmpv 未正确安装
+- libmpv 版本过旧 (需要 0.33.0+)
+- JNA 依赖问题
+- 平台特定库路径问题
 
-**2. 视频黑屏但有声音**
+**3. 视频黑屏但有声音**
 
 症状: 音频正常播放,但视频区域显示黑屏
 
 解决方案:
 ```kotlin
 // 禁用硬件加速测试
-val hwAccel = HardwareAcceleration(
-    type = HardwareAccelerationType.NONE,
-    isAvailable = false,
-    deviceName = null
-)
+engine.setOption("hwdec", "no")
 
-// 查看诊断报告
-val report = engine.generateDiagnosticReport()
-println(report)
+// 尝试不同的视频输出
+engine.setOption("vo", "x11")  // Linux
+engine.setOption("vo", "gpu")  // 通用
 ```
 
 可能原因:
 - 硬件加速不兼容
-- 视频编解码器不支持
-- Canvas 渲染问题
+- 视频输出配置问题
+- 渲染上下文创建失败
+- 显卡驱动问题
 
-**3. 音视频不同步**
+**4. 音视频不同步**
 
 症状: 音频和视频播放速度不一致
 
 解决方案:
 ```kotlin
-// 调整同步阈值
-private val syncThreshold = 20L  // 降低到 20ms
-
-// 启用硬件加速
-val hwAccel = HardwareAccelerationManager.detectHardwareAcceleration()
-if (hwAccel.isAvailable) {
-    HardwareAccelerationManager.configureHardwareAcceleration(grabber, hwAccel)
-}
-
-// 监控同步状态
-val syncDrift = synchronizer.calculateVideoDelay(videoTimestamp)
-println("同步偏移: ${syncDrift}ms")
+// libmpv 自动处理音视频同步
+// 如果仍有问题,尝试:
+engine.setOption("video-sync", "audio")
+engine.setOption("audio-buffer", "0.2")
 ```
 
 可能原因:
 - 解码性能不足
-- 缓冲区配置不当
 - 系统资源紧张
+- 音频设备延迟
 
-**4. 直播流延迟过高**
+**5. 直播流延迟过高**
 
 症状: 直播流延迟超过 2-3 秒
 
 解决方案:
 ```kotlin
-// 启用直播流优化
-val configurator = FFmpegGrabberConfigurator()
-configurator.configure(grabber, isLiveStream = true)
+// 减小缓存
+engine.setOption("cache", "no")
+engine.setOption("cache-secs", "5")
+engine.setOption("demuxer-readahead-secs", "2")
 
-// 减小缓冲区
-private val videoFrameQueue = LinkedBlockingQueue<Frame>(10)
-private val audioFrameQueue = LinkedBlockingQueue<Frame>(50)
-
-// 启用跳帧
-if (synchronizer.shouldDropFrame(videoTimestamp)) {
-    videoFrameQueue.poll() // 丢弃过时的帧
-}
+// 启用低延迟模式
+engine.setOption("profile", "low-latency")
 ```
 
 可能原因:
-- 缓冲区过大
-- 未启用直播流优化
+- 缓存配置过大
 - 网络带宽不足
-
-**5. 内存泄漏或内存持续增长**
-
-症状: 应用运行一段时间后内存占用持续增长
-
-解决方案:
-```kotlin
-// 确保正确释放资源
-override fun onDispose() {
-    engine.stop()
-    engine.release()
-}
-
-// 检查资源状态
-val report = engine.generateDiagnosticReport()
-println("线程状态: ${report.threadStatus}")
-println("队列状态: ${report.queueStatus}")
-
-// 手动清理队列
-videoFrameQueue.clear()
-audioFrameQueue.clear()
-```
-
-可能原因:
-- 未调用 `release()` 方法
-- 帧对象未正确释放
-- 线程未正确停止
+- 服务器延迟
 
 **6. 网络流播放失败**
 
@@ -739,107 +705,96 @@ audioFrameQueue.clear()
 # 测试网络连接
 curl -I "YOUR_STREAM_URL"
 
-# 检查防火墙设置
-# macOS: 系统偏好设置 > 安全性与隐私 > 防火墙
-# Windows: 控制面板 > Windows Defender 防火墙
+# 使用 mpv 命令行测试
+mpv "YOUR_STREAM_URL"
 ```
 
 ```kotlin
-// 启用自动重连
-val optimizer = LiveStreamOptimizer()
-optimizer.handleConnectionInterruption(grabber, url)
-
 // 增加超时时间
-grabber.option("timeout", "10000000") // 10 秒
+engine.setOption("network-timeout", "60")
+
+// 设置 User-Agent
+engine.setOption("user-agent", "IPTV-Player/1.0")
+
+// 启用重连
+engine.setOption("stream-lavf-o", "reconnect=1,reconnect_streamed=1")
 ```
 
 可能原因:
 - 网络连接不稳定
 - 防火墙阻止连接
 - 流服务器问题
+- URL 格式错误
 
-**7. 性能问题 (高 CPU/内存使用)**
+**7. 内存泄漏或崩溃**
+
+症状: 应用运行一段时间后内存占用持续增长或崩溃
+
+解决方案:
+```kotlin
+// 确保正确释放资源
+override fun onDispose() {
+    engine.stop()
+    engine.destroy()
+}
+
+// 检查事件线程是否正确停止
+// 检查渲染上下文是否正确释放
+```
+
+可能原因:
+- 未调用 `destroy()` 方法
+- 事件线程未正确停止
+- 渲染上下文未释放
+- libmpv 内部错误
+
+**8. 性能问题 (高 CPU/内存使用)**
 
 症状: CPU 使用率过高或内存占用过大
 
 解决方案:
 ```kotlin
-// 监控性能
-val monitor = PerformanceMonitor()
-monitor.startMonitoring()
+// 禁用硬件加速 (如果反而更慢)
+engine.setOption("hwdec", "no")
 
-val stats = monitor.getStatistics()
-println("CPU: ${stats.cpuUsage}%")
-println("内存: ${stats.memoryUsage / 1024 / 1024}MB")
+// 降低视频质量
+engine.setOption("vd-lavc-threads", "2")
 
-// 优化建议
-if (stats.cpuUsage > 50) {
-    // 禁用硬件加速可能更高效 (某些情况下)
-    // 或降低视频分辨率
-}
+// 减小缓存
+engine.setOption("cache-secs", "5")
 ```
 
 可能原因:
 - 硬件加速不稳定
 - 视频分辨率过高
 - 系统资源不足
-
-#### VLC 播放器常见问题 (备选)
-
-详细指南: [VIDEO_TROUBLESHOOTING.md](.kiro/specs/desktop-video-rendering-fix/VIDEO_TROUBLESHOOTING.md)
-
-**1. VLC 未找到**
-
-症状: 应用提示 "VLC not found" 或无法初始化
-
-解决方案:
-```bash
-# macOS
-brew install --cask vlc
-
-# Linux
-sudo apt-get install vlc
-
-# Windows
-# 从 https://www.videolan.org/vlc/ 下载安装
-```
-
-**2. 黑屏但有声音**
-
-症状: 音频正常,视频黑屏
-
-解决方案:
-- 检查 VLC 版本 (推荐 3.0.18+)
-- 更新显卡驱动
-- 在 VLC 设置中禁用硬件加速
+- 解码器选择不当
 
 #### 获取帮助
 
 如果问题仍未解决:
 
 1. **查看日志**: 应用日志包含详细的错误信息
-2. **生成诊断报告**: 使用 `generateDiagnosticReport()` 获取完整状态
-3. **提交 Issue**: 在 [GitHub Issues](https://github.com/YOUR_USERNAME/IPTV/issues) 提交问题,附上:
+2. **测试 mpv 命令行**: 使用 `mpv` 命令测试流是否可以播放
+3. **检查 libmpv 版本**: 确保使用最新版本的 libmpv
+4. **提交 Issue**: 在 [GitHub Issues](https://github.com/YOUR_USERNAME/IPTV/issues) 提交问题,附上:
    - 操作系统和版本
+   - libmpv 版本 (`mpv --version`)
    - 应用版本
-   - 诊断报告
    - 错误日志
    - 复现步骤
+   - 测试的流 URL (如果可以公开)
 
 ## ⚠️ 已知问题和限制
 
 ### Desktop 版本
 
-**FFmpeg 播放器** (默认):
-- ✅ 首次运行需要下载 JavaCV 和 FFmpeg 依赖 (~200MB)
-- ✅ 首次播放可能需要 2-3 秒初始化解码器
+**libmpv 播放器** (默认):
+- ⚠️ 需要系统安装 libmpv (外部依赖)
+- ⚠️ 首次播放可能需要 1-2 秒初始化
 - ⚠️ 某些专有编解码器 (如 DRM 保护内容) 可能不支持
 - ⚠️ 硬件加速在某些旧设备上可能不稳定
-
-**VLC 播放器** (备选):
-- ⚠️ 需要系统安装 VLC Media Player (外部依赖)
-- ⚠️ 首次播放延迟较长 (500-1000ms)
-- ⚠️ 直播流延迟较高 (2-3 秒)
+- ⚠️ Windows 上需要手动配置 libmpv 路径
 
 ### Android 版本
 

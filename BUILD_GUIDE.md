@@ -19,10 +19,24 @@
 - **JDK**: Java Development Kit 17 或更高版本
 - **Gradle**: 项目已包含 Gradle Wrapper，无需单独安装
 - **Git**: 用于版本控制
+- **libmpv**: Desktop 视频播放所需 (参考 [LIBMPV_SETUP_GUIDE.md](LIBMPV_SETUP_GUIDE.md))
 
 验证 Java 版本：
 ```bash
 java -version
+```
+
+验证 libmpv 安装：
+```bash
+# macOS
+ls /opt/homebrew/lib/libmpv.dylib  # Apple Silicon
+ls /usr/local/lib/libmpv.dylib     # Intel
+
+# Linux
+ls /usr/lib/x86_64-linux-gnu/libmpv.so
+
+# Windows
+where libmpv-2.dll
 ```
 
 ### Android 特定要求
@@ -377,22 +391,135 @@ chmod +x build-all.sh
 
 ---
 
+## libmpv 依赖说明
+
+### Desktop 平台依赖
+
+Desktop 版本使用 **libmpv** 作为视频播放引擎。这是一个外部依赖,用户需要在系统上安装 libmpv 才能运行应用。
+
+#### 为什么需要 libmpv?
+
+- **强大的格式支持**: 支持几乎所有主流视频格式和流媒体协议
+- **硬件加速**: 自动检测并使用平台特定的硬件加速
+- **优秀的性能**: 高效的解码和渲染,低资源占用
+- **跨平台**: 支持 macOS, Linux 和 Windows
+
+#### 依赖配置
+
+在 `composeApp/build.gradle.kts` 中,libmpv 通过 JNA 绑定:
+
+```kotlin
+dependencies {
+    // JNA 用于调用 libmpv C API
+    implementation("net.java.dev.jna:jna:5.13.0")
+    implementation("net.java.dev.jna:jna-platform:5.13.0")
+}
+```
+
+#### 用户安装指南
+
+详细的安装指南请参考 [LIBMPV_SETUP_GUIDE.md](LIBMPV_SETUP_GUIDE.md)
+
+**快速安装**:
+
+**macOS**:
+```bash
+brew install mpv
+```
+
+**Linux (Ubuntu/Debian)**:
+```bash
+sudo apt-get install libmpv-dev mpv
+```
+
+**Linux (Fedora/RHEL)**:
+```bash
+sudo dnf install mpv mpv-libs-devel
+```
+
+**Windows**:
+1. 下载 MPV: https://mpv.io/installation/
+2. 解压到目录 (例如 `C:\mpv\`)
+3. 将目录添加到系统 PATH
+4. 或将 `libmpv-2.dll` 复制到应用目录
+
+#### 在打包时的注意事项
+
+1. **不要将 libmpv 打包到应用中**: libmpv 是系统级依赖,应由用户安装
+2. **提供安装说明**: 在 README、安装向导或首次运行时提供安装指南
+3. **检测 libmpv**: 应用启动时检测 libmpv 是否可用,如果未找到则显示友好的错误消息
+4. **版本要求**: 确保用户安装的 libmpv 版本 >= 0.33.0
+
+#### 应用中的检测逻辑
+
+```kotlin
+// LibmpvPlayerImplementation.kt
+override fun isAvailable(): Boolean {
+    return try {
+        LibmpvLoader.load()
+        true
+    } catch (e: UnsatisfiedLinkError) {
+        false
+    }
+}
+
+override fun getUnavailableReason(): String? {
+    if (!isAvailable()) {
+        return when {
+            System.getProperty("os.name").contains("Mac") ->
+                "libmpv not found. Install with: brew install mpv"
+            System.getProperty("os.name").contains("Linux") ->
+                "libmpv not found. Install with: sudo apt-get install libmpv-dev mpv"
+            else ->
+                "libmpv not found. Download from: https://mpv.io/installation/"
+        }
+    }
+    return null
+}
+```
+
+---
+
 ## 常见问题
 
-### 1. VLC 依赖问题（桌面版）
+### 1. libmpv 依赖问题（桌面版）
 
-桌面版使用 VLCJ 播放视频，用户需要安装 VLC：
+桌面版使用 libmpv 播放视频，用户需要安装 libmpv：
 
 **macOS:**
 ```bash
-brew install --cask vlc
+brew install mpv
+```
+
+**Linux:**
+```bash
+sudo apt-get install libmpv-dev mpv
 ```
 
 **Windows:**
-- 下载并安装 VLC: https://www.videolan.org/vlc/
+- 下载 MPV: https://mpv.io/installation/
+- 将 libmpv-2.dll 添加到系统 PATH 或应用目录
 
 **在安装包中包含说明:**
-在应用首次启动时检测 VLC 并提示用户安装。
+在应用首次启动时检测 libmpv 并提示用户安装。
+
+**详细安装指南**: 参考 [LIBMPV_SETUP_GUIDE.md](LIBMPV_SETUP_GUIDE.md)
+
+**验证安装**:
+```bash
+# macOS
+ls /opt/homebrew/lib/libmpv.dylib  # Apple Silicon
+ls /usr/local/lib/libmpv.dylib     # Intel
+
+# Linux
+ls /usr/lib/x86_64-linux-gnu/libmpv.so
+
+# Windows
+where libmpv-2.dll
+
+# 或使用 mpv 命令
+mpv --version
+```
 
 ### 2. 构建失败：内存不足
 

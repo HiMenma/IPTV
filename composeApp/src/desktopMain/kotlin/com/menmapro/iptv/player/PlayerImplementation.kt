@@ -17,27 +17,32 @@ import com.menmapro.iptv.ui.components.PlayerState
  */
 enum class PlayerImplementationType {
     /**
-     * VLC-based player implementation using VLCJ library
+     * VLC-based player implementation using VLCJ library (deprecated)
      * 
      * Features:
      * - Mature and stable
      * - Wide format support
      * - Hardware acceleration
      * - Requires VLC installation
+     * 
+     * Note: VLC player has been removed. This enum value is kept for
+     * backward compatibility with saved preferences.
      */
+    @Deprecated("VLC player has been removed. Use LIBMPV instead.")
     VLC,
     
     /**
-     * FFmpeg-based player implementation using JavaCV
+     * libmpv-based player implementation using JNA bindings
      * 
      * Features:
-     * - Direct FFmpeg integration
-     * - Fine-grained control
-     * - Custom audio-video synchronization
-     * - Live stream optimization
-     * - No external dependencies
+     * - Powerful and efficient
+     * - Simple API
+     * - Excellent format support
+     * - Hardware acceleration
+     * - Reliable streaming
+     * - Requires libmpv installation
      */
-    FFMPEG
+    LIBMPV
 }
 
 /**
@@ -126,53 +131,29 @@ data class PlayerConfiguration(
     /**
      * The preferred player implementation type
      */
-    val preferredImplementation: PlayerImplementationType = PlayerImplementationType.VLC,
+    val preferredImplementation: PlayerImplementationType = PlayerImplementationType.LIBMPV,
     
     /**
      * Whether to automatically fallback to alternative implementation
      * if the preferred one is not available
      */
-    val enableAutoFallback: Boolean = true,
-    
-    /**
-     * The fallback implementation to use if preferred is not available
-     * and auto-fallback is enabled
-     */
-    val fallbackImplementation: PlayerImplementationType = PlayerImplementationType.FFMPEG
+    val enableAutoFallback: Boolean = false
 ) {
     companion object {
         /**
-         * Default configuration using VLC with FFmpeg fallback
+         * Default configuration using libmpv
          */
         val DEFAULT = PlayerConfiguration(
-            preferredImplementation = PlayerImplementationType.VLC,
-            enableAutoFallback = true,
-            fallbackImplementation = PlayerImplementationType.FFMPEG
-        )
-        
-        /**
-         * Configuration that always uses VLC (no fallback)
-         */
-        val VLC_ONLY = PlayerConfiguration(
-            preferredImplementation = PlayerImplementationType.VLC,
+            preferredImplementation = PlayerImplementationType.LIBMPV,
             enableAutoFallback = false
         )
         
         /**
-         * Configuration that always uses FFmpeg (no fallback)
+         * Configuration that always uses libmpv (default)
          */
-        val FFMPEG_ONLY = PlayerConfiguration(
-            preferredImplementation = PlayerImplementationType.FFMPEG,
+        val LIBMPV_ONLY = PlayerConfiguration(
+            preferredImplementation = PlayerImplementationType.LIBMPV,
             enableAutoFallback = false
-        )
-        
-        /**
-         * Configuration using FFmpeg with VLC fallback
-         */
-        val FFMPEG_FIRST = PlayerConfiguration(
-            preferredImplementation = PlayerImplementationType.FFMPEG,
-            enableAutoFallback = true,
-            fallbackImplementation = PlayerImplementationType.VLC
         )
     }
 }
