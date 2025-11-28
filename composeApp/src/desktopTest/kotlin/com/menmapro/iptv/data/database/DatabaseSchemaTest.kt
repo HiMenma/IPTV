@@ -33,7 +33,10 @@ class DatabaseSchemaTest {
             url = "http://test.com/playlist.m3u",
             type = "M3U_URL",
             createdAt = System.currentTimeMillis(),
-            updatedAt = System.currentTimeMillis()
+            updatedAt = System.currentTimeMillis(),
+            xtreamServerUrl = null,
+            xtreamUsername = null,
+            xtreamPassword = null
         )
         
         // Insert categories
@@ -74,7 +77,10 @@ class DatabaseSchemaTest {
             url = null,
             type = "XTREAM",
             createdAt = createdAt,
-            updatedAt = createdAt
+            updatedAt = createdAt,
+            xtreamServerUrl = null,
+            xtreamUsername = null,
+            xtreamPassword = null
         )
         
         // Verify original name
@@ -111,7 +117,10 @@ class DatabaseSchemaTest {
             url = null,
             type = "XTREAM",
             createdAt = System.currentTimeMillis(),
-            updatedAt = System.currentTimeMillis()
+            updatedAt = System.currentTimeMillis(),
+            xtreamServerUrl = null,
+            xtreamUsername = null,
+            xtreamPassword = null
         )
         
         // Insert categories
@@ -209,7 +218,10 @@ class DatabaseSchemaTest {
             url = null,
             type = "XTREAM",
             createdAt = System.currentTimeMillis(),
-            updatedAt = System.currentTimeMillis()
+            updatedAt = System.currentTimeMillis(),
+            xtreamServerUrl = null,
+            xtreamUsername = null,
+            xtreamPassword = null
         )
         
         // Insert category
@@ -280,7 +292,10 @@ class DatabaseSchemaTest {
             url = null,
             type = "XTREAM",
             createdAt = System.currentTimeMillis(),
-            updatedAt = System.currentTimeMillis()
+            updatedAt = System.currentTimeMillis(),
+            xtreamServerUrl = null,
+            xtreamUsername = null,
+            xtreamPassword = null
         )
         
         // Insert channel with categoryId

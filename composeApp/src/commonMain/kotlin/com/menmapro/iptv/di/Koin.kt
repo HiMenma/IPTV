@@ -94,6 +94,17 @@ val appModule = module {
     factory { FavoriteScreenModel(get()) }
 }
 
+/**
+ * Desktop-specific module for player configuration
+ * 
+ * This module is only included on desktop platforms and provides
+ * player implementation selection and configuration.
+ * 
+ * Requirements:
+ * - 9.1: Support configuration-based player selection
+ */
+expect val desktopPlayerModule: org.koin.core.module.Module
+
 fun initKoin(appDeclaration: KoinApplication.() -> Unit = {}) {
     // Check if Koin is already initialized to prevent duplicate initialization
     if (GlobalContext.getOrNull() != null) {
@@ -103,7 +114,7 @@ fun initKoin(appDeclaration: KoinApplication.() -> Unit = {}) {
     
     startKoin {
         appDeclaration()
-        modules(appModule)
+        modules(appModule, desktopPlayerModule)
     }
 }
 

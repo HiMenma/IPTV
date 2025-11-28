@@ -88,8 +88,9 @@ kotlin {
                 implementation(libs.kotlinx.coroutines.swing)
                 implementation(libs.ktor.client.okhttp) // Use OkHttp for desktop too or CIO
                 
-                // Video Player
-                implementation(libs.vlcj)
+                // Video Player - FFmpeg/JavaCV (only player)
+                implementation(libs.javacv.platform)
+                implementation(libs.ffmpeg.platform)
                 
                 // Database Driver
                 implementation(libs.sqldelight.sqlite.driver)
@@ -159,6 +160,16 @@ android {
 compose.desktop {
     application {
         mainClass = "MainKt"
+        
+        // JVM 参数配置 - 优化 FFmpeg 性能
+        jvmArgs += listOf(
+            "-Xmx2G",                          // 最大堆内存 2GB
+            "-Xms512M",                        // 初始堆内存 512MB
+            "-XX:+UseG1GC",                    // 使用 G1 垃圾收集器
+            "-XX:MaxGCPauseMillis=200",        // 最大 GC 暂停时间
+            "-Djava.awt.headless=false",       // 启用 AWT 图形支持
+            "-Dsun.java2d.opengl=true"         // 启用 OpenGL 加速（如果可用）
+        )
 
         nativeDistributions {
             targetFormats(TargetFormat.Dmg, TargetFormat.Msi, TargetFormat.Deb, TargetFormat.Exe)
@@ -176,6 +187,10 @@ compose.desktop {
                 iconFile.set(project.file("src/desktopMain/resources/app_icon.icns"))
                 // 确保包含 Java SQL 模块
                 modules("java.sql")
+                // macOS 特定的 JVM 参数
+                jvmArgs += listOf(
+                    "-Dapple.awt.application.appearance=system"
+                )
             }
             
             windows {
