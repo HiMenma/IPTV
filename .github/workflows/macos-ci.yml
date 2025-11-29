@@ -1,0 +1,369 @@
+name: macOS CI/CD
+
+on:
+  push:
+    branches:
+      - main
+      - develop
+    paths:
+      - 'macos/**'
+      - '.github/workflows/macos-ci.yml'
+  pull_request:
+    branches:
+      - main
+      - develop
+    paths:
+      - 'macos/**'
+      - '.github/workflows/macos-ci.yml'
+  workflow_dispatch:
+
+jobs:
+  build-and-test:
+    name: Build and Test macOS App
+    runs-on: macos-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Select Xcode version
+        run: sudo xcode-select -s /Applications/Xcode_15.2.app/Contents/Developer
+      
+      - name: Show Xcode version
+        run: xcodebuild -version
+      
+      - name: Cache Swift Package Manager
+        uses: actions/cache@v4
+        with:
+          path: |
+            macos/.build
+            ~/Library/Developer/Xcode/DerivedData
+          key: ${{ runner.os }}-spm-${{ hashFiles('macos/Package.swift', 'macos/IPTVPlayer.xcodeproj/project.pbxproj') }}
+          restore-keys: |
+            ${{ runner.os }}-spm-
+      
+      - name: Resolve Swift Package Dependencies
+        working-directory: macos
+        run: |
+          xcodebuild \
+            -project IPTVPlayer.xcodeproj \
+            -scheme IPTVPlayer \
+            -resolvePackageDependencies
+      
+      - name: Build macOS App (Debug)
+        working-directory: macos
+        run: |
+          xcodebuild \
+            -project IPTVPlayer.xcodeproj \
+            -scheme IPTVPlayer \
+            -configuration Debug \
+            -destination 'platform=macOS' \
+            clean build \
+            CODE_SIGN_IDENTITY="" \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGNING_ALLOWED=NO
+      
+      - name: Run Unit Tests
+        working-directory: macos
+        run: |
+          xcodebuild test \
+            -project IPTVPlayer.xcodeproj \
+            -scheme IPTVPlayer \
+            -destination 'platform=macOS' \
+            -enableCodeCoverage YES \
+            CODE_SIGN_IDENTITY="" \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGNING_ALLOWED=NO
+      
+      - name: Generate Code Coverage Report
+        working-directory: macos
+        run: |
+          xcrun llvm-cov export \
+            -format="lcov" \
+            -instr-profile=$(find ~/Library/Developer/Xcode/DerivedData -name "*.profdata" | head -n 1) \
+            $(find ~/Library/Developer/Xcode/DerivedData -name "IPTVPlayer" -type f | head -n 1) \
+            > coverage.lcov || echo "Coverage generation skipped (no tests yet)"
+      
+      - name: Upload Coverage to Codecov
+        if: success()
+        uses: codecov/codecov-action@v4
+        with:
+          files: ./macos/coverage.lcov
+          flags: macos
+          name: macos-coverage
+          fail_ci_if_error: false
+      
+      - name: Archive Build Logs
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-logs
+          path: ~/Library/Logs/DiagnosticReports/
+          retention-days: 7
+
+  build-release:
+    name: Build Release DMG
+    runs-on: macos-latest
+    needs: build-and-test
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/'))
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Select Xcode version
+        run: sudo xcode-select -s /Applications/Xcode_15.2.app/Contents/Developer
+      
+      - name: Cache Swift Package Manager
+        uses: actions/cache@v4
+        with:
+          path: |
+            macos/.build
+            ~/Library/Developer/Xcode/DerivedData
+          key: ${{ runner.os }}-spm-${{ hashFiles('macos/Package.swift', 'macos/IPTVPlayer.xcodeproj/project.pbxproj') }}
+          restore-keys: |
+            ${{ runner.os }}-spm-
+      
+      - name: Install Signing Certificate
+        if: ${{ secrets.MACOS_CERTIFICATE != '' }}
+        env:
+          CERTIFICATE_BASE64: ${{ secrets.MACOS_CERTIFICATE }}
+          CERTIFICATE_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
+          KEYCHAIN_PASSWORD: ${{ secrets.KEYCHAIN_PASSWORD }}
+        run: |
+          # Create variables
+          CERTIFICATE_PATH=$RUNNER_TEMP/certificate.p12
+          KEYCHAIN_PATH=$RUNNER_TEMP/app-signing.keychain-db
+          
+          # Decode certificate
+          echo -n "$CERTIFICATE_BASE64" | base64 --decode -o $CERTIFICATE_PATH
+          
+          # Create temporary keychain
+          security create-keychain -p "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
+          security set-keychain-settings -lut 21600 $KEYCHAIN_PATH
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
+          
+          # Import certificate
+          security import $CERTIFICATE_PATH -P "$CERTIFICATE_PASSWORD" -A -t cert -f pkcs12 -k $KEYCHAIN_PATH
+          security list-keychain -d user -s $KEYCHAIN_PATH
+          
+          # Allow codesign to access the keychain
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
+          
+          echo "CODE_SIGNING_ENABLED=true" >> $GITHUB_ENV
+      
+      - name: Resolve Swift Package Dependencies
+        working-directory: macos
+        run: |
+          xcodebuild \
+            -project IPTVPlayer.xcodeproj \
+            -scheme IPTVPlayer \
+            -resolvePackageDependencies
+      
+      - name: Build macOS App (Release - Signed)
+        if: env.CODE_SIGNING_ENABLED == 'true'
+        working-directory: macos
+        env:
+          DEVELOPMENT_TEAM: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          xcodebuild \
+            -project IPTVPlayer.xcodeproj \
+            -scheme IPTVPlayer \
+            -configuration Release \
+            -destination 'platform=macOS' \
+            -archivePath ./build/IPTVPlayer.xcarchive \
+            archive \
+            CODE_SIGN_STYLE=Manual \
+            CODE_SIGN_IDENTITY="Developer ID Application" \
+            DEVELOPMENT_TEAM="$DEVELOPMENT_TEAM"
+      
+      - name: Build macOS App (Release - Unsigned)
+        if: env.CODE_SIGNING_ENABLED != 'true'
+        working-directory: macos
+        run: |
+          xcodebuild \
+            -project IPTVPlayer.xcodeproj \
+            -scheme IPTVPlayer \
+            -configuration Release \
+            -destination 'platform=macOS' \
+            -archivePath ./build/IPTVPlayer.xcarchive \
+            archive \
+            CODE_SIGN_IDENTITY="" \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGNING_ALLOWED=NO
+      
+      - name: Export Archive
+        working-directory: macos
+        run: |
+          # Create export options plist
+          cat > ExportOptions.plist << EOF
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+              <key>method</key>
+              <string>mac-application</string>
+              <key>signingStyle</key>
+              <string>manual</string>
+              <key>stripSwiftSymbols</key>
+              <true/>
+          </dict>
+          </plist>
+          EOF
+          
+          # Export the archive
+          xcodebuild \
+            -exportArchive \
+            -archivePath ./build/IPTVPlayer.xcarchive \
+            -exportPath ./build/export \
+            -exportOptionsPlist ExportOptions.plist \
+            CODE_SIGN_IDENTITY="" \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGNING_ALLOWED=NO || \
+          # Fallback: copy app directly from archive
+          cp -R ./build/IPTVPlayer.xcarchive/Products/Applications/IPTVPlayer.app ./build/export/
+      
+      - name: Verify Code Signature
+        if: env.CODE_SIGNING_ENABLED == 'true'
+        working-directory: macos
+        run: |
+          APP_PATH="./build/export/IPTVPlayer.app"
+          
+          echo "Verifying code signature..."
+          codesign --verify --deep --strict --verbose=2 "$APP_PATH"
+          
+          echo "Signature details:"
+          codesign -dv --verbose=4 "$APP_PATH" 2>&1 | grep -E "(Identifier|Authority|TeamIdentifier)"
+          
+          echo "Checking entitlements:"
+          codesign -d --entitlements - "$APP_PATH"
+      
+      - name: Create DMG
+        working-directory: macos
+        run: |
+          # Install create-dmg if not available
+          if ! command -v create-dmg &> /dev/null; then
+            brew install create-dmg
+          fi
+          
+          # Get version from Info.plist or use default
+          VERSION=$(defaults read "$(pwd)/IPTVPlayer/Info.plist" CFBundleShortVersionString 2>/dev/null || echo "1.0.0")
+          
+          # Create DMG
+          create-dmg \
+            --volname "IPTV Player" \
+            --volicon "IPTVPlayer/Assets.xcassets/AppIcon.appiconset/app_icon.png" \
+            --window-pos 200 120 \
+            --window-size 800 400 \
+            --icon-size 100 \
+            --icon "IPTVPlayer.app" 200 190 \
+            --hide-extension "IPTVPlayer.app" \
+            --app-drop-link 600 185 \
+            --no-internet-enable \
+            "./build/IPTVPlayer-${VERSION}.dmg" \
+            "./build/export/IPTVPlayer.app" || \
+          # Fallback: use hdiutil
+          hdiutil create -volname "IPTV Player" \
+            -srcfolder "./build/export/IPTVPlayer.app" \
+            -ov -format UDZO \
+            "./build/IPTVPlayer-${VERSION}.dmg"
+          
+          echo "DMG_PATH=./build/IPTVPlayer-${VERSION}.dmg" >> $GITHUB_ENV
+          echo "VERSION=${VERSION}" >> $GITHUB_ENV
+      
+      - name: Notarize DMG
+        if: env.CODE_SIGNING_ENABLED == 'true' && startsWith(github.ref, 'refs/tags/')
+        working-directory: macos
+        env:
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_ID_PASSWORD: ${{ secrets.APPLE_ID_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          DMG_FILE="./build/IPTVPlayer-${VERSION}.dmg"
+          
+          echo "Submitting DMG for notarization..."
+          xcrun notarytool submit "$DMG_FILE" \
+            --apple-id "$APPLE_ID" \
+            --password "$APPLE_ID_PASSWORD" \
+            --team-id "$APPLE_TEAM_ID" \
+            --wait \
+            --timeout 30m
+          
+          echo "Stapling notarization ticket..."
+          xcrun stapler staple "$DMG_FILE"
+          
+          echo "Verifying stapled ticket..."
+          xcrun stapler validate "$DMG_FILE"
+          
+          echo "Checking Gatekeeper assessment..."
+          spctl -a -vvv -t install "$DMG_FILE"
+      
+      - name: Upload DMG Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: IPTVPlayer-macOS-${{ env.VERSION }}
+          path: macos/build/*.dmg
+          retention-days: 90
+      
+      - name: Calculate DMG Checksum
+        working-directory: macos
+        run: |
+          shasum -a 256 build/*.dmg > build/checksums.txt
+          cat build/checksums.txt
+      
+      - name: Upload Checksum
+        uses: actions/upload-artifact@v4
+        with:
+          name: IPTVPlayer-macOS-${{ env.VERSION }}-checksums
+          path: macos/build/checksums.txt
+          retention-days: 90
+      
+      - name: Cleanup Keychain
+        if: always() && env.CODE_SIGNING_ENABLED == 'true'
+        run: |
+          KEYCHAIN_PATH=$RUNNER_TEMP/app-signing.keychain-db
+          security delete-keychain $KEYCHAIN_PATH || true
+
+  create-release:
+    name: Create GitHub Release
+    runs-on: ubuntu-latest
+    needs: build-release
+    if: startsWith(github.ref, 'refs/tags/v')
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Download DMG Artifact
+        uses: actions/download-artifact@v4
+        with:
+          pattern: IPTVPlayer-macOS-*
+          path: artifacts
+      
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: |
+            artifacts/**/*.dmg
+            artifacts/**/*.txt
+          draft: false
+          prerelease: false
+          generate_release_notes: true
+          body: |
+            ## macOS Native Application Release
+            
+            This release includes the native macOS application built with Swift and SwiftUI.
+            
+            ### Installation
+            1. Download the DMG file
+            2. Open the DMG
+            3. Drag IPTVPlayer.app to your Applications folder
+            4. Launch from Applications
+            
+            ### Requirements
+            - macOS 13.0 or later
+            
+            ### Checksums
+            See the checksums.txt file for SHA-256 verification.
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -84,7 +84,23 @@
 - 优点: 完全原生，无额外依赖
 - 缺点: 代码重复，维护成本高
 
-**推荐方案**: 选项 1（保留 Kotlin 共享库），因为可以最大化利用现有代码，减少迁移工作量。
+**最终决策**: 选项 3（各平台独立实现）
+
+经过详细评估（参见 `macos/CODE_SHARING_STRATEGY.md`），我们决定使用原生 Swift 实现 macOS 应用，原因如下：
+
+1. **最小代码重复**: 共享代码仅约 250 行简单逻辑（M3U 解析器、Xtream 客户端、数据模型）
+2. **开发速度**: 原生实现比设置 Kotlin/Native 更快
+3. **维护性**: 单一语言代码库比复杂的 FFI 互操作更易维护
+4. **调试体验**: 完整的 Xcode 调试器支持，无 FFI 边界问题
+5. **性能**: 无 FFI 开销，原生 Swift 性能
+6. **平台集成**: 完美集成 Swift async/await、Combine、SwiftUI
+7. **团队效率**: 标准 Swift 开发工作流
+
+这个决策在以下情况下应重新考虑：
+- 共享业务逻辑增长到 >1000 行
+- 需要共享复杂算法（如视频编解码实现）
+- 团队获得显著的 Kotlin/Native 专业知识
+- Kotlin/Native 工具显著改进
 
 ## Components and Interfaces
 
@@ -401,32 +417,26 @@ public class LibVLCPlayerService : IVideoPlayerService
 }
 ```
 
-### Shared Business Logic (Kotlin)
+### Shared Business Logic
 
-如果选择保留 Kotlin 共享库，需要定义清晰的接口：
+由于我们选择了原生实现策略，macOS 和 Windows 应用将分别用 Swift 和 C# 实现业务逻辑。
 
-**KotlinBridge (macOS)**
-```swift
-// Generated from Kotlin/Native
-class KotlinM3UParser {
-    func parse(content: String) -> [KotlinChannel]
-}
+**实现原则**:
+1. 遵循相同的接口规范
+2. 使用相同的测试用例验证行为一致性
+3. 参考设计文档中的规范确保实现正确性
+4. 通过属性测试确保两个实现的行为等价
 
-class KotlinXtreamClient {
-    func authenticate(account: KotlinXtreamAccount) async -> Bool
-    func getLiveStreams(account: KotlinXtreamAccount) async -> [KotlinChannel]
-}
-```
+**代码组织**:
+- macOS: `macos/IPTVPlayer/Services/` 目录下的 Swift 文件
+- Windows: `windows/IPTVPlayer/Services/` 目录下的 C# 文件
 
-**KotlinBridge (Windows)**
-```csharp
-// P/Invoke to Kotlin/Native DLL
-[DllImport("iptv_shared.dll")]
-public static extern IntPtr ParseM3U(string content);
-
-[DllImport("iptv_shared.dll")]
-public static extern bool AuthenticateXtream(string serverUrl, string username, string password);
-```
+每个平台的实现将包括：
+- M3U 解析器
+- Xtream API 客户端
+- 数据模型
+- 错误处理
+- 重试机制
 
 ## Data Models
 
@@ -1226,28 +1236,51 @@ public class IPTVPlayerUITests
 
 ```
 IPTV/
-├── android/                    # Android 应用（保持不变）
-│   └── composeApp/
-├── macos/                      # 新的 macOS 应用
+├── composeApp/                 # Android 应用（保持不变，使用 Kotlin Multiplatform）
+│   ├── src/
+│   │   ├── androidMain/
+│   │   ├── commonMain/
+│   │   └── desktopMain/       # 现有的 Kotlin/JVM 桌面应用（将被替换）
+│   └── build.gradle.kts
+├── macos/                      # 新的原生 macOS 应用
 │   ├── IPTVPlayer.xcodeproj
 │   ├── IPTVPlayer/
-│   │   ├── App/
-│   │   ├── Views/
-│   │   ├── ViewModels/
-│   │   ├── Services/
-│   │   └── Models/
-│   └── IPTVPlayerTests/
-├── windows/                    # 新的 Windows 应用
+│   │   ├── App/               # 应用入口
+│   │   ├── Views/             # SwiftUI 视图
+│   │   ├── ViewModels/        # MVVM 视图模型
+│   │   ├── Services/          # 业务逻辑服务
+│   │   │   ├── M3UParser.swift
+│   │   │   ├── XtreamClient.swift
+│   │   │   ├── PlaylistRepository.swift
+│   │   │   └── VideoPlayerService.swift
+│   │   ├── Models/            # 数据模型
+│   │   │   ├── Channel.swift
+│   │   │   ├── Playlist.swift
+│   │   │   └── Category.swift
+│   │   └── Resources/         # 资源文件
+│   ├── IPTVPlayerTests/       # 单元测试
+│   └── CODE_SHARING_STRATEGY.md  # 代码共享策略文档
+├── windows/                    # 新的原生 Windows 应用
 │   ├── IPTVPlayer.sln
 │   ├── IPTVPlayer/
-│   │   ├── App.xaml
-│   │   ├── Views/
-│   │   ├── ViewModels/
-│   │   ├── Services/
-│   │   └── Models/
-│   └── IPTVPlayer.Tests/
-├── shared/                     # 共享代码（可选）
-│   └── kotlin-native/          # 如果使用 Kotlin/Native
+│   │   ├── App.xaml           # 应用入口
+│   │   ├── Views/             # WPF 视图
+│   │   ├── ViewModels/        # MVVM 视图模型
+│   │   ├── Services/          # 业务逻辑服务
+│   │   │   ├── M3UParser.cs
+│   │   │   ├── XtreamClient.cs
+│   │   │   ├── PlaylistRepository.cs
+│   │   │   └── VideoPlayerService.cs
+│   │   ├── Models/            # 数据模型
+│   │   │   ├── Channel.cs
+│   │   │   ├── Playlist.cs
+│   │   │   └── Category.cs
+│   │   └── Resources/         # 资源文件
+│   └── IPTVPlayer.Tests/      # 单元测试
+└── docs/                       # 文档
+    ├── requirements.md
+    ├── design.md
+    └── tasks.md          # 如果使用 Kotlin/Native
 └── docs/                       # 文档
 ```
 
