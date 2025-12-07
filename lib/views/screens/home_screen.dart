@@ -1,0 +1,198 @@
+import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import '../../viewmodels/configuration_viewmodel.dart';
+import '../../models/configuration.dart';
+import '../widgets/configuration_card.dart';
+import 'configuration_screen.dart';
+import 'channel_list_screen.dart';
+
+class HomeScreen extends StatefulWidget {
+  const HomeScreen({super.key});
+
+  @override
+  State<HomeScreen> createState() => _HomeScreenState();
+}
+
+class _HomeScreenState extends State<HomeScreen> {
+  @override
+  void initState() {
+    super.initState();
+    // Load configurations when screen initializes
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      context.read<ConfigurationViewModel>().loadConfigurations();
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('IPTV Player'),
+        backgroundColor: Theme.of(context).colorScheme.inversePrimary,
+      ),
+      body: Consumer<ConfigurationViewModel>(
+        builder: (context, viewModel, child) {
+          if (viewModel.isLoading) {
+            return const Center(child: CircularProgressIndicator());
+          }
+
+          if (viewModel.error != null) {
+            return Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(Icons.error_outline, size: 48, color: Theme.of(context).colorScheme.error),
+                  const SizedBox(height: 16),
+                  Text(
+                    viewModel.error!,
+                    textAlign: TextAlign.center,
+                    style: TextStyle(color: Theme.of(context).colorScheme.error),
+                  ),
+                  const SizedBox(height: 16),
+                  ElevatedButton(
+                    onPressed: () => viewModel.loadConfigurations(),
+                    child: const Text('Retry'),
+                  ),
+                ],
+              ),
+            );
+          }
+
+          if (viewModel.configurations.isEmpty) {
+            return Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(Icons.tv_off, size: 64, color: Theme.of(context).colorScheme.onSurfaceVariant),
+                  const SizedBox(height: 16),
+                  Text(
+                    'No configurations yet',
+                    style: TextStyle(fontSize: 18, color: Theme.of(context).colorScheme.onSurfaceVariant),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'Add a configuration to get started',
+                    style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant),
+                  ),
+                ],
+              ),
+            );
+          }
+
+          return ListView.builder(
+            padding: const EdgeInsets.all(8),
+            itemCount: viewModel.configurations.length,
+            itemBuilder: (context, index) {
+              final config = viewModel.configurations[index];
+              return ConfigurationCard(
+                configuration: config,
+                onTap: () => _navigateToChannelList(context, config),
+                onEdit: () => _navigateToEditConfiguration(context, config),
+                onDelete: () => _deleteConfiguration(context, config),
+                onRefresh: () => _refreshConfiguration(context, config),
+              );
+            },
+          );
+        },
+      ),
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: () => _navigateToAddConfiguration(context),
+        icon: const Icon(Icons.add),
+        label: const Text('Add Configuration'),
+      ),
+    );
+  }
+
+  void _navigateToChannelList(BuildContext context, Configuration config) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => ChannelListScreen(configuration: config),
+      ),
+    );
+  }
+
+  void _navigateToAddConfiguration(BuildContext context) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => const ConfigurationScreen(),
+      ),
+    );
+  }
+
+  void _navigateToEditConfiguration(
+      BuildContext context, Configuration config) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => ConfigurationScreen(configuration: config),
+      ),
+    );
+  }
+
+  Future<void> _deleteConfiguration(
+      BuildContext context, Configuration config) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Delete Configuration'),
+        content: Text('Are you sure you want to delete "${config.name}"?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: TextButton.styleFrom(foregroundColor: Theme.of(context).colorScheme.error),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true && context.mounted) {
+      try {
+        await context.read<ConfigurationViewModel>().deleteConfiguration(config.id);
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Deleted "${config.name}"')),
+          );
+        }
+      } catch (e) {
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Failed to delete: $e'),
+              backgroundColor: Theme.of(context).colorScheme.error,
+            ),
+          );
+        }
+      }
+    }
+  }
+
+  Future<void> _refreshConfiguration(
+      BuildContext context, Configuration config) async {
+    try {
+      await context.read<ConfigurationViewModel>().refreshConfiguration(config.id);
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Refreshed "${config.name}"')),
+        );
+      }
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to refresh: $e'),
+            backgroundColor: Theme.of(context).colorScheme.error,
+          ),
+        );
+      }
+    }
+  }
+}
+
+
