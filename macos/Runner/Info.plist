@@ -31,5 +31,13 @@
 	<!-- Network client entitlement -->
 	<key>com.apple.security.network.client</key>
 	<true/>
+	<!-- Allow HTTP connections for IPTV streaming -->
+	<key>NSAppTransportSecurity</key>
+	<dict>
+		<key>NSAllowsArbitraryLoads</key>
+		<true/>
+		<key>NSAllowsLocalNetworking</key>
+		<true/>
+	</dict>
 </dict>
 </plist>

@@ -5,9 +5,11 @@
 *.swp
 .DS_Store
 .atom/
+.build/
 .buildlog/
 .history
 .svn/
+.swiftpm/
 migrate_working_dir/
 
 # IntelliJ related
@@ -130,6 +132,19 @@ Icon
 Network Trash Folder
 Temporary Items
 .apdisk
+
+# macOS/iOS build artifacts
+**/macos/Flutter/ephemeral/
+**/macos/Flutter/GeneratedPluginRegistrant.swift
+**/macos/Pods/
+**/macos/Runner.xcworkspace/
+**/macos/.symlinks/
+
+# Swift Package Manager
+.swiftpm/
+**/DerivedData/
+**/.build/
+**/Package.resolved
 
 # Web related
 lib/generated_plugin_registrant.dart

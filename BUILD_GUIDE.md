@@ -104,6 +104,18 @@ flutter build ipa --release
 
 ### 🖥️ macOS 打包
 
+#### 前置要求
+
+首次构建 macOS 应用需要安装 CocoaPods：
+
+```bash
+# 使用 Homebrew 安装 CocoaPods
+brew install cocoapods
+
+# 安装 macOS 平台依赖
+cd macos && pod install && cd ..
+```
+
 #### 1. 构建 macOS 应用
 
 ```bash
@@ -111,7 +123,9 @@ flutter build ipa --release
 flutter build macos --release
 ```
 
-生成的文件位置：`build/macos/Build/Products/Release/iptv_player.app`
+生成的文件位置：`build/macos/Build/Products/Release/IPTV Player.app`
+
+**注意：** 应用已配置支持 HTTP 连接，可以播放 HTTP 和 HTTPS 协议的 IPTV 流。配置位于 `macos/Runner/Info.plist` 中的 `NSAppTransportSecurity` 设置。
 
 #### 2. 创建 DMG 安装包（可选）
 
@@ -127,11 +141,11 @@ create-dmg \
   --window-pos 200 120 \
   --window-size 800 400 \
   --icon-size 100 \
-  --icon "iptv_player.app" 200 190 \
-  --hide-extension "iptv_player.app" \
+  --icon "IPTV Player.app" 200 190 \
+  --hide-extension "IPTV Player.app" \
   --app-drop-link 600 185 \
   "IPTV-Player-1.0.0.dmg" \
-  "build/macos/Build/Products/Release/iptv_player.app"
+  "build/macos/Build/Products/Release/IPTV Player.app"
 ```
 
 #### 3. 代码签名（可选，用于分发）
@@ -139,7 +153,7 @@ create-dmg \
 ```bash
 # 签名应用
 codesign --deep --force --verify --verbose --sign "Developer ID Application: Your Name" \
-  build/macos/Build/Products/Release/iptv_player.app
+  "build/macos/Build/Products/Release/IPTV Player.app"
 
 # 公证应用（需要 Apple Developer 账号）
 xcrun notarytool submit IPTV-Player-1.0.0.dmg \
@@ -331,8 +345,10 @@ flutter build apk --release
 
 ### 4. iOS/macOS 构建失败
 
-- 更新 CocoaPods：`sudo gem install cocoapods`
-- 清理 Pods：`cd ios && rm -rf Pods Podfile.lock && pod install`
+- 安装/更新 CocoaPods：`brew install cocoapods` 或 `sudo gem install cocoapods`
+- 清理 iOS Pods：`cd ios && rm -rf Pods Podfile.lock && pod install && cd ..`
+- 清理 macOS Pods：`cd macos && rm -rf Pods Podfile.lock && pod install && cd ..`
+- 如果遇到 "CocoaPods not installed" 错误，确保已安装 CocoaPods 并重新运行 `pod install`
 
 ### 5. 构建体积过大
 
@@ -360,7 +376,7 @@ adb install build/app/outputs/flutter-apk/app-release.apk
 
 ### macOS
 
-直接双击 `build/macos/Build/Products/Release/iptv_player.app` 运行。
+直接双击 `build/macos/Build/Products/Release/IPTV Player.app` 运行。
 
 ### Web
 
