@@ -20,6 +20,8 @@ class Configuration {
   final Map<String, dynamic> credentials;
   final DateTime createdAt;
   final DateTime? lastRefreshed;
+  final DateTime? expirationDate; // For Xtream accounts
+  final String? accountStatus; // For Xtream accounts
 
   Configuration({
     required this.id,
@@ -28,6 +30,8 @@ class Configuration {
     required this.credentials,
     required this.createdAt,
     this.lastRefreshed,
+    this.expirationDate,
+    this.accountStatus,
   });
 
   Map<String, dynamic> toJson() {
@@ -38,6 +42,8 @@ class Configuration {
       'credentials': credentials,
       'createdAt': createdAt.toIso8601String(),
       'lastRefreshed': lastRefreshed?.toIso8601String(),
+      'expirationDate': expirationDate?.toIso8601String(),
+      'accountStatus': accountStatus,
     };
   }
 
@@ -51,6 +57,10 @@ class Configuration {
       lastRefreshed: json['lastRefreshed'] != null
           ? DateTime.parse(json['lastRefreshed'] as String)
           : null,
+      expirationDate: json['expirationDate'] != null
+          ? DateTime.parse(json['expirationDate'] as String)
+          : null,
+      accountStatus: json['accountStatus'] as String?,
     );
   }
 
@@ -63,7 +73,9 @@ class Configuration {
         other.type == type &&
         _mapEquals(other.credentials, credentials) &&
         other.createdAt == createdAt &&
-        other.lastRefreshed == lastRefreshed;
+        other.lastRefreshed == lastRefreshed &&
+        other.expirationDate == expirationDate &&
+        other.accountStatus == accountStatus;
   }
 
   @override
@@ -75,6 +87,8 @@ class Configuration {
       Object.hashAll(credentials.entries.map((e) => Object.hash(e.key, e.value))),
       createdAt,
       lastRefreshed,
+      expirationDate,
+      accountStatus,
     );
   }
 

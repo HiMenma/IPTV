@@ -41,8 +41,41 @@ class ConfigurationCard extends StatelessWidget {
             Text(_getTypeLabel(configuration.type)),
             if (configuration.lastRefreshed != null)
               Text(
-                'Last refreshed: ${_formatDate(configuration.lastRefreshed!)}',
+                'Updated: ${_formatDate(configuration.lastRefreshed!)}',
                 style: const TextStyle(fontSize: 12),
+              ),
+            if (configuration.type == ConfigType.xtream && configuration.expirationDate != null)
+              Text(
+                'Expires: ${_formatExpirationDate(configuration.expirationDate!)}',
+                style: TextStyle(
+                  fontSize: 12,
+                  color: _getExpirationColor(context, configuration.expirationDate!),
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            if (configuration.type == ConfigType.xtream && configuration.accountStatus != null)
+              Row(
+                children: [
+                  Icon(
+                    configuration.accountStatus?.toLowerCase() == 'active'
+                        ? Icons.check_circle
+                        : Icons.error,
+                    size: 14,
+                    color: configuration.accountStatus?.toLowerCase() == 'active'
+                        ? Colors.green
+                        : Colors.red,
+                  ),
+                  const SizedBox(width: 4),
+                  Text(
+                    configuration.accountStatus!,
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: configuration.accountStatus?.toLowerCase() == 'active'
+                          ? Colors.green
+                          : Colors.red,
+                    ),
+                  ),
+                ],
               ),
           ],
         ),
@@ -135,6 +168,36 @@ class ConfigurationCard extends StatelessWidget {
       return '${difference.inHours}h ago';
     } else {
       return '${difference.inDays}d ago';
+    }
+  }
+
+  String _formatExpirationDate(DateTime date) {
+    final now = DateTime.now();
+    final difference = date.difference(now);
+
+    if (difference.isNegative) {
+      return 'Expired';
+    } else if (difference.inDays < 1) {
+      return 'Today';
+    } else if (difference.inDays < 7) {
+      return 'in ${difference.inDays}d';
+    } else if (difference.inDays < 30) {
+      return 'in ${(difference.inDays / 7).floor()}w';
+    } else {
+      return 'in ${(difference.inDays / 30).floor()}mo';
+    }
+  }
+
+  Color _getExpirationColor(BuildContext context, DateTime expirationDate) {
+    final now = DateTime.now();
+    final difference = expirationDate.difference(now);
+
+    if (difference.isNegative) {
+      return Theme.of(context).colorScheme.error;
+    } else if (difference.inDays < 7) {
+      return Colors.orange;
+    } else {
+      return Colors.green;
     }
   }
 }

@@ -57,12 +57,38 @@ class ConfigurationViewModel extends ChangeNotifier {
     notifyListeners();
 
     try {
+      DateTime? expirationDate;
+      String? accountStatus;
+
+      // Get account info for Xtream configurations
+      if (type == ConfigType.xtream) {
+        try {
+          final serverUrl = credentials['serverUrl'] as String;
+          final username = credentials['username'] as String;
+          final password = credentials['password'] as String;
+          
+          final accountInfo = await _xtreamService.getAccountInfo(
+            serverUrl,
+            username,
+            password,
+          );
+          if (accountInfo != null) {
+            expirationDate = accountInfo.expirationDate;
+            accountStatus = accountInfo.status;
+          }
+        } catch (e) {
+          debugPrint('Failed to get account info: $e');
+        }
+      }
+
       final config = Configuration(
         id: _uuid.v4(),
         name: name,
         type: type,
         credentials: credentials,
         createdAt: DateTime.now(),
+        expirationDate: expirationDate,
+        accountStatus: accountStatus,
       );
 
       await _configRepository.save(config);
@@ -95,6 +121,8 @@ class ConfigurationViewModel extends ChangeNotifier {
         credentials: config.credentials,
         createdAt: config.createdAt,
         lastRefreshed: config.lastRefreshed,
+        expirationDate: config.expirationDate,
+        accountStatus: config.accountStatus,
       );
 
       await _configRepository.update(updatedConfig);
@@ -143,12 +171,30 @@ class ConfigurationViewModel extends ChangeNotifier {
       }
 
       List<Channel> channels;
+      DateTime? expirationDate;
+      String? accountStatus;
 
       switch (config.type) {
         case ConfigType.xtream:
           final serverUrl = config.credentials['serverUrl'] as String;
           final username = config.credentials['username'] as String;
           final password = config.credentials['password'] as String;
+          
+          // Get account info for Xtream
+          try {
+            final accountInfo = await _xtreamService.getAccountInfo(
+              serverUrl,
+              username,
+              password,
+            );
+            if (accountInfo != null) {
+              expirationDate = accountInfo.expirationDate;
+              accountStatus = accountInfo.status;
+            }
+          } catch (e) {
+            debugPrint('Failed to get account info: $e');
+          }
+          
           channels = await _xtreamService.getChannels(
             serverUrl,
             username,
@@ -169,7 +215,7 @@ class ConfigurationViewModel extends ChangeNotifier {
           break;
       }
 
-      // Update lastRefreshed timestamp
+      // Update lastRefreshed timestamp and account info
       final updatedConfig = Configuration(
         id: config.id,
         name: config.name,
@@ -177,6 +223,8 @@ class ConfigurationViewModel extends ChangeNotifier {
         credentials: config.credentials,
         createdAt: config.createdAt,
         lastRefreshed: DateTime.now(),
+        expirationDate: expirationDate,
+        accountStatus: accountStatus,
       );
 
       await _configRepository.update(updatedConfig);
