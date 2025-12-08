@@ -3,11 +3,11 @@ import 'dart:async';
 import 'package:chewie/chewie.dart';
 import '../models/channel.dart';
 import '../services/player_service.dart';
-import '../repositories/history_repository.dart';
+import '../repositories/history_repository_sqlite.dart';
 
 class PlayerViewModel extends ChangeNotifier {
   final PlayerService _playerService;
-  final HistoryRepository _historyRepository;
+  final HistoryRepositorySQLite _historyRepository;
 
   PlayerState _state = PlayerState.idle;
   String? _error;
@@ -18,9 +18,9 @@ class PlayerViewModel extends ChangeNotifier {
 
   PlayerViewModel({
     PlayerService? playerService,
-    HistoryRepository? historyRepository,
+    HistoryRepositorySQLite? historyRepository,
   })  : _playerService = playerService ?? PlayerService(),
-        _historyRepository = historyRepository ?? HistoryRepository() {
+        _historyRepository = historyRepository ?? HistoryRepositorySQLite() {
     _setupListeners();
   }
 

@@ -68,6 +68,15 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
           setState(() {
             _currentIndex = index;
           });
+          
+          // Refresh data when switching to Favorites or History tabs
+          if (index == 1) {
+            // Favorites tab
+            context.read<ChannelViewModel>().loadFavorites();
+          } else if (index == 2) {
+            // History tab
+            context.read<ChannelViewModel>().loadHistory();
+          }
         },
         destinations: const [
           NavigationDestination(
