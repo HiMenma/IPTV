@@ -108,7 +108,7 @@ class PlayerService {
       // Initialize the video player
       await _videoController!.initialize();
       
-      // Create Chewie controller
+      // Create Chewie controller with optimized settings for live streams
       _chewieController = ChewieController(
         videoPlayerController: _videoController!,
         autoPlay: true,
@@ -124,8 +124,40 @@ class PlayerService {
         ),
         placeholder: Container(
           color: Color(0xFF000000),
+          child: Center(
+            child: CircularProgressIndicator(
+              color: Color(0xFF2196F3),
+            ),
+          ),
         ),
         autoInitialize: true,
+        errorBuilder: (context, errorMessage) {
+          return Container(
+            color: Color(0xFF000000),
+            child: Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(Icons.error_outline, color: Color(0xFFFF5252), size: 48),
+                  SizedBox(height: 16),
+                  Text(
+                    'Video Error',
+                    style: TextStyle(color: Colors.white, fontSize: 18),
+                  ),
+                  SizedBox(height: 8),
+                  Padding(
+                    padding: EdgeInsets.symmetric(horizontal: 32),
+                    child: Text(
+                      errorMessage,
+                      style: TextStyle(color: Colors.white70, fontSize: 14),
+                      textAlign: TextAlign.center,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
       );
       
       // Set volume
@@ -305,15 +337,21 @@ class PlayerService {
         }
         
         if (value.isPlaying) {
-          _updateState(PlayerState.playing);
-        } else if (_currentState == PlayerState.playing) {
-          // Only update to paused if we were playing
+          if (_currentState != PlayerState.playing) {
+            _updateState(PlayerState.playing);
+          }
+        } else if (_currentState == PlayerState.playing && !value.isBuffering) {
+          // Only update to paused if we were playing and not buffering
+          // This prevents false "stopped" states during buffering
           _updateState(PlayerState.paused);
         }
       }
       
-      // Handle completion
-      if (value.position >= value.duration && value.duration.inMilliseconds > 0) {
+      // Handle completion (only for non-live streams with valid duration)
+      // For live streams, duration is often 0 or very large, so we skip this check
+      if (value.duration.inMilliseconds > 0 && 
+          value.duration.inMilliseconds < 86400000 && // Less than 24 hours (not a live stream)
+          value.position >= value.duration) {
         _updateState(PlayerState.stopped);
         try {
           WakelockPlus.disable();
