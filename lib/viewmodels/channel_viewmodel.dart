@@ -2,17 +2,19 @@ import 'package:flutter/foundation.dart';
 import '../models/channel.dart';
 import '../models/favorite.dart';
 import '../models/browse_history.dart';
-import '../repositories/favorite_repository.dart';
-import '../repositories/history_repository.dart';
+import '../repositories/favorite_repository_sqlite.dart';
+import '../repositories/history_repository_sqlite.dart';
 import '../repositories/configuration_repository.dart';
+import '../repositories/channel_cache_repository_sqlite.dart';
 import '../services/xtream_service.dart';
 import '../services/m3u_service.dart';
 import '../models/configuration.dart';
 
 class ChannelViewModel extends ChangeNotifier {
-  final FavoriteRepository _favoriteRepository;
-  final HistoryRepository _historyRepository;
+  final FavoriteRepositorySQLite _favoriteRepository;
+  final HistoryRepositorySQLite _historyRepository;
   final ConfigurationRepository _configRepository;
+  final ChannelCacheRepositorySQLite _cacheRepository;
   final XtreamService _xtreamService;
   final M3UService _m3uService;
 
@@ -24,14 +26,16 @@ class ChannelViewModel extends ChangeNotifier {
   String? _error;
 
   ChannelViewModel({
-    FavoriteRepository? favoriteRepository,
-    HistoryRepository? historyRepository,
+    FavoriteRepositorySQLite? favoriteRepository,
+    HistoryRepositorySQLite? historyRepository,
     ConfigurationRepository? configRepository,
+    ChannelCacheRepositorySQLite? cacheRepository,
     XtreamService? xtreamService,
     M3UService? m3uService,
-  })  : _favoriteRepository = favoriteRepository ?? FavoriteRepository(),
-        _historyRepository = historyRepository ?? HistoryRepository(),
+  })  : _favoriteRepository = favoriteRepository ?? FavoriteRepositorySQLite(),
+        _historyRepository = historyRepository ?? HistoryRepositorySQLite(),
         _configRepository = configRepository ?? ConfigurationRepository(),
+        _cacheRepository = cacheRepository ?? ChannelCacheRepositorySQLite(),
         _xtreamService = xtreamService ?? XtreamService(),
         _m3uService = m3uService ?? M3UService();
 
@@ -42,7 +46,8 @@ class ChannelViewModel extends ChangeNotifier {
   String? get error => _error;
 
   /// Load channels from a specific configuration
-  Future<void> loadChannels(String configId) async {
+  /// Uses cache if available, otherwise loads from source
+  Future<void> loadChannels(String configId, {bool forceRefresh = false}) async {
     _isLoading = true;
     _error = null;
     notifyListeners();
@@ -53,6 +58,25 @@ class ChannelViewModel extends ChangeNotifier {
         throw Exception('Configuration not found');
       }
 
+      // Try to load from cache first (unless force refresh)
+      if (!forceRefresh) {
+        final cachedChannels = await _cacheRepository.loadChannels(configId);
+        if (cachedChannels != null && cachedChannels.isNotEmpty) {
+          _channels = cachedChannels;
+          debugPrint('Loaded ${_channels.length} channels from cache for $configId');
+          
+          // Load favorite IDs for quick lookup
+          await _loadFavoriteIds();
+          
+          _isLoading = false;
+          notifyListeners();
+          return;
+        }
+      }
+
+      // Load from source
+      debugPrint('Loading channels from source for $configId (forceRefresh: $forceRefresh)');
+      
       switch (config.type) {
         case ConfigType.xtream:
           final serverUrl = config.credentials['serverUrl'] as String;
@@ -77,11 +101,16 @@ class ChannelViewModel extends ChangeNotifier {
           break;
       }
       
+      // Save to cache
+      await _cacheRepository.saveChannels(configId, _channels);
+      debugPrint('Saved ${_channels.length} channels to cache for $configId');
+      
       // Load favorite IDs for quick lookup
       await _loadFavoriteIds();
     } catch (e) {
       _error = 'Failed to load channels: $e';
       _channels = [];
+      debugPrint('Error loading channels: $e');
     } finally {
       _isLoading = false;
       notifyListeners();
@@ -99,6 +128,7 @@ class ChannelViewModel extends ChangeNotifier {
   }
 
   /// Load favorite channels
+  /// Loads ONLY from SQLite cache, never from network
   Future<void> loadFavorites() async {
     _isLoading = true;
     _error = null;
@@ -108,42 +138,28 @@ class ChannelViewModel extends ChangeNotifier {
       final favoriteRecords = await _favoriteRepository.getAll();
       _favoriteIds = favoriteRecords.map((f) => f.channelId).toSet();
       
+      debugPrint('Loading favorites: ${favoriteRecords.length} favorite records found');
+      debugPrint('Favorite IDs: $_favoriteIds');
+      
       // Get all configurations to find channels
       final configs = await _configRepository.getAll();
+      debugPrint('Found ${configs.length} configurations');
       final allChannels = <Channel>[];
       
-      // Load channels from all configurations
+      // Load channels ONLY from cache (never from network)
       for (final config in configs) {
         try {
-          List<Channel> configChannels;
+          // Load from cache only
+          final configChannels = await _cacheRepository.loadChannels(config.id);
           
-          switch (config.type) {
-            case ConfigType.xtream:
-              final serverUrl = config.credentials['serverUrl'] as String;
-              final username = config.credentials['username'] as String;
-              final password = config.credentials['password'] as String;
-              configChannels = await _xtreamService.getChannels(
-                serverUrl,
-                username,
-                password,
-                config.id,
-              );
-              break;
-
-            case ConfigType.m3uNetwork:
-              final url = config.credentials['url'] as String;
-              configChannels = await _m3uService.parseNetworkFile(url, config.id);
-              break;
-
-            case ConfigType.m3uLocal:
-              final filePath = config.credentials['filePath'] as String;
-              configChannels = await _m3uService.parseLocalFile(filePath, config.id);
-              break;
+          if (configChannels != null && configChannels.isNotEmpty) {
+            debugPrint('Loaded ${configChannels.length} channels from cache for config ${config.id}');
+            allChannels.addAll(configChannels);
+          } else {
+            debugPrint('No cache found for config ${config.id}');
           }
-          
-          allChannels.addAll(configChannels);
         } catch (e) {
-          // Skip configurations that fail to load
+          debugPrint('Failed to load cache for config ${config.id}: $e');
           continue;
         }
       }
@@ -152,9 +168,12 @@ class ChannelViewModel extends ChangeNotifier {
       _favorites = allChannels
           .where((channel) => _favoriteIds.contains(channel.id))
           .toList();
+      
+      debugPrint('Loaded ${_favorites.length} favorite channels from cache');
     } catch (e) {
       _error = 'Failed to load favorites: $e';
       _favorites = [];
+      debugPrint('Error loading favorites: $e');
     } finally {
       _isLoading = false;
       notifyListeners();
@@ -162,6 +181,7 @@ class ChannelViewModel extends ChangeNotifier {
   }
 
   /// Load browse history
+  /// Loads ONLY from SQLite cache, never from network
   Future<void> loadHistory() async {
     _isLoading = true;
     _error = null;
@@ -169,43 +189,27 @@ class ChannelViewModel extends ChangeNotifier {
 
     try {
       final historyRecords = await _historyRepository.getAll();
+      debugPrint('Loading history: ${historyRecords.length} history records found');
       
       // Get all configurations to find channels
       final configs = await _configRepository.getAll();
+      debugPrint('Found ${configs.length} configurations');
       final allChannels = <Channel>[];
       
-      // Load channels from all configurations
+      // Load channels ONLY from cache (never from network)
       for (final config in configs) {
         try {
-          List<Channel> configChannels;
+          // Load from cache only
+          final configChannels = await _cacheRepository.loadChannels(config.id);
           
-          switch (config.type) {
-            case ConfigType.xtream:
-              final serverUrl = config.credentials['serverUrl'] as String;
-              final username = config.credentials['username'] as String;
-              final password = config.credentials['password'] as String;
-              configChannels = await _xtreamService.getChannels(
-                serverUrl,
-                username,
-                password,
-                config.id,
-              );
-              break;
-
-            case ConfigType.m3uNetwork:
-              final url = config.credentials['url'] as String;
-              configChannels = await _m3uService.parseNetworkFile(url, config.id);
-              break;
-
-            case ConfigType.m3uLocal:
-              final filePath = config.credentials['filePath'] as String;
-              configChannels = await _m3uService.parseLocalFile(filePath, config.id);
-              break;
+          if (configChannels != null && configChannels.isNotEmpty) {
+            debugPrint('Loaded ${configChannels.length} channels from cache for config ${config.id}');
+            allChannels.addAll(configChannels);
+          } else {
+            debugPrint('No cache found for config ${config.id}');
           }
-          
-          allChannels.addAll(configChannels);
         } catch (e) {
-          // Skip configurations that fail to load
+          debugPrint('Failed to load cache for config ${config.id}: $e');
           continue;
         }
       }
@@ -219,9 +223,12 @@ class ChannelViewModel extends ChangeNotifier {
           .where((channel) => channel != null)
           .cast<Channel>()
           .toList();
+      
+      debugPrint('Loaded ${_history.length} history channels from cache');
     } catch (e) {
       _error = 'Failed to load history: $e';
       _history = [];
+      debugPrint('Error loading history: $e');
     } finally {
       _isLoading = false;
       notifyListeners();
@@ -241,14 +248,16 @@ class ChannelViewModel extends ChangeNotifier {
       if (wasFavorite) {
         await _favoriteRepository.remove(channelId);
         _favoriteIds.remove(channelId);
+        
+        // Remove from favorites list without reloading
+        _favorites.removeWhere((channel) => channel.id == channelId);
       } else {
         await _favoriteRepository.add(channelId);
         _favoriteIds.add(channelId);
-      }
-      
-      // Reload favorites list if we're on the favorites screen
-      if (_favorites.isNotEmpty || wasFavorite) {
-        await loadFavorites();
+        
+        // Note: When adding a favorite, we don't add to _favorites list here
+        // because we don't have the Channel object. It will be loaded next time
+        // the favorites screen is opened.
       }
       
       // Notify listeners to update UI

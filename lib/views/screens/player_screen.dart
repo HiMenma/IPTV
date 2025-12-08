@@ -16,21 +16,26 @@ class PlayerScreen extends StatefulWidget {
 }
 
 class _PlayerScreenState extends State<PlayerScreen> {
+  PlayerViewModel? _playerViewModel;
+
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      context.read<PlayerViewModel>().playChannel(widget.channel);
+      if (mounted) {
+        _playerViewModel = context.read<PlayerViewModel>();
+        _playerViewModel!.playChannel(widget.channel);
+      }
     });
   }
 
   @override
   void dispose() {
     // Stop playback when leaving the screen
+    // Use the cached reference to avoid context issues
     try {
-      context.read<PlayerViewModel>().stop();
+      _playerViewModel?.stop();
     } catch (e) {
-      // Ignore errors during dispose
       debugPrint('Error stopping playback during dispose: $e');
     }
     super.dispose();

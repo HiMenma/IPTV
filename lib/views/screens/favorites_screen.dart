@@ -16,25 +16,27 @@ class _FavoritesScreenState extends State<FavoritesScreen> with AutomaticKeepAli
   @override
   bool get wantKeepAlive => true;
 
+  bool _isInitialized = false;
+
   @override
   void initState() {
     super.initState();
-    _loadData();
-  }
-
-  @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    // Reload data when the screen becomes visible
-    _loadData();
-  }
-
-  void _loadData() {
+    // Load data on first init
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) {
-        context.read<ChannelViewModel>().loadFavorites();
+      if (mounted && !_isInitialized) {
+        _isInitialized = true;
+        _loadData();
       }
     });
+  }
+
+  Future<void> _loadData() async {
+    try {
+      await context.read<ChannelViewModel>().loadFavorites();
+      debugPrint('Favorites loaded successfully');
+    } catch (e) {
+      debugPrint('Error loading favorites: $e');
+    }
   }
 
   @override
@@ -97,6 +99,12 @@ class _FavoritesScreenState extends State<FavoritesScreen> with AutomaticKeepAli
                     style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant),
                     textAlign: TextAlign.center,
                   ),
+                  const SizedBox(height: 16),
+                  ElevatedButton.icon(
+                    onPressed: () => context.read<ChannelViewModel>().loadFavorites(),
+                    icon: const Icon(Icons.refresh),
+                    label: const Text('Refresh'),
+                  ),
                 ],
               ),
             );
@@ -137,7 +145,11 @@ class _FavoritesScreenState extends State<FavoritesScreen> with AutomaticKeepAli
 
   Future<void> _removeFavorite(BuildContext context, Channel channel) async {
     try {
-      await context.read<ChannelViewModel>().toggleFavorite(channel.id);
+      final viewModel = context.read<ChannelViewModel>();
+      
+      // Remove from favorites without reloading everything
+      await viewModel.toggleFavorite(channel.id);
+      
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Removed "${channel.name}" from favorites')),

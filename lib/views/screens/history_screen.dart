@@ -16,25 +16,27 @@ class _HistoryScreenState extends State<HistoryScreen> with AutomaticKeepAliveCl
   @override
   bool get wantKeepAlive => true;
 
+  bool _isInitialized = false;
+
   @override
   void initState() {
     super.initState();
-    _loadData();
-  }
-
-  @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    // Reload data when the screen becomes visible
-    _loadData();
-  }
-
-  void _loadData() {
+    // Load data on first init
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) {
-        context.read<ChannelViewModel>().loadHistory();
+      if (mounted && !_isInitialized) {
+        _isInitialized = true;
+        _loadData();
       }
     });
+  }
+
+  Future<void> _loadData() async {
+    try {
+      await context.read<ChannelViewModel>().loadHistory();
+      debugPrint('History loaded successfully');
+    } catch (e) {
+      debugPrint('Error loading history: $e');
+    }
   }
 
   @override
@@ -108,6 +110,12 @@ class _HistoryScreenState extends State<HistoryScreen> with AutomaticKeepAliveCl
                     'Channels you watch will appear here',
                     style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant),
                     textAlign: TextAlign.center,
+                  ),
+                  const SizedBox(height: 16),
+                  ElevatedButton.icon(
+                    onPressed: () => context.read<ChannelViewModel>().loadHistory(),
+                    icon: const Icon(Icons.refresh),
+                    label: const Text('Refresh'),
                   ),
                 ],
               ),

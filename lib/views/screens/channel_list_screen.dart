@@ -25,7 +25,8 @@ class _ChannelListScreenState extends State<ChannelListScreen> {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      context.read<ChannelViewModel>().loadChannels(widget.configuration.id);
+      // Load channels (will use cache if available)
+      context.read<ChannelViewModel>().loadChannels(widget.configuration.id, forceRefresh: false);
     });
   }
 
@@ -293,10 +294,11 @@ class _ChannelListScreenState extends State<ChannelListScreen> {
       await configViewModel.refreshConfiguration(widget.configuration.id);
       
       if (mounted) {
-        await channelViewModel.loadChannels(widget.configuration.id);
+        // Force refresh to reload from source and update cache
+        await channelViewModel.loadChannels(widget.configuration.id, forceRefresh: true);
         
         messenger.showSnackBar(
-          const SnackBar(content: Text('Configuration refreshed')),
+          const SnackBar(content: Text('Configuration refreshed from source')),
         );
       }
     } catch (e) {

@@ -37,6 +37,8 @@ dependencies:
   
   # Local storage
   shared_preferences: ^2.3.3
+  sqflite: ^2.4.1
+  sqflite_common_ffi: ^2.3.4
   
   # File operations
   file_picker: ^8.1.4
