@@ -27,7 +27,12 @@ class _PlayerScreenState extends State<PlayerScreen> {
   @override
   void dispose() {
     // Stop playback when leaving the screen
-    context.read<PlayerViewModel>().stop();
+    try {
+      context.read<PlayerViewModel>().stop();
+    } catch (e) {
+      // Ignore errors during dispose
+      debugPrint('Error stopping playback during dispose: $e');
+    }
     super.dispose();
   }
 

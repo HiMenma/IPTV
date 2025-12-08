@@ -46,7 +46,7 @@ class Validators {
     try {
       final uri = Uri.parse(trimmedUrl);
       
-      // Check if host is present
+      // Check if host is present (allow IP addresses and domains)
       if (uri.host.isEmpty) {
         return 'Invalid URL: missing host';
       }
@@ -54,6 +54,13 @@ class Validators {
       // Check for valid scheme
       if (uri.scheme != 'http' && uri.scheme != 'https') {
         return 'URL must use http or https protocol';
+      }
+
+      // Additional validation: ensure the URL has a valid structure
+      // Allow URLs with or without path (e.g., http://example.com:8080 is valid)
+      // The host can be a domain name or IP address
+      if (uri.host.contains(' ')) {
+        return 'Invalid URL: host cannot contain spaces';
       }
 
       return null;

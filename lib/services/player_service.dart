@@ -61,13 +61,7 @@ class PlayerService {
   /// Requirements: 5.3
   Future<void> play(String streamUrl) async {
     try {
-      // Check if player is initialized (we need to have called initialize at least once)
-      if (_currentState == PlayerState.idle && _videoController == null && _chewieController == null) {
-        // Auto-initialize if not done yet
-        await initialize();
-      }
-
-      // Validate stream URL
+      // Validate stream URL first
       if (streamUrl.isEmpty) {
         throw Exception('Invalid stream URL: URL cannot be empty');
       }
@@ -80,14 +74,30 @@ class PlayerService {
 
       // Dispose of existing controllers if any
       if (_chewieController != null) {
-        await _chewieController!.pause();
-        _chewieController!.dispose();
+        try {
+          await _chewieController!.pause();
+          _chewieController!.dispose();
+        } catch (e) {
+          // Ignore disposal errors
+          debugPrint('Error disposing chewie controller: $e');
+        }
         _chewieController = null;
       }
       if (_videoController != null) {
-        await _videoController!.dispose();
+        try {
+          if (_videoController!.value.isPlaying) {
+            await _videoController!.pause();
+          }
+          await _videoController!.dispose();
+        } catch (e) {
+          // Ignore disposal errors
+          debugPrint('Error disposing video controller: $e');
+        }
         _videoController = null;
       }
+
+      // Small delay to ensure resources are fully released
+      await Future.delayed(const Duration(milliseconds: 100));
 
       // Create video player controller with network URL
       _videoController = VideoPlayerController.networkUrl(Uri.parse(streamUrl));
@@ -223,6 +233,11 @@ class PlayerService {
   /// Dispose of player resources
   Future<void> dispose() async {
     try {
+      // Stop playback first
+      if (_videoController != null && _videoController!.value.isPlaying) {
+        await _videoController!.pause();
+      }
+      
       // Disable wakelock (ignore errors in test environment)
       try {
         await WakelockPlus.disable();

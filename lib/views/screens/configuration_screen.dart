@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import 'package:file_picker/file_picker.dart';
 import '../../viewmodels/configuration_viewmodel.dart';
 import '../../models/configuration.dart';
+import '../../utils/validators.dart';
 
 class ConfigurationScreen extends StatefulWidget {
   final Configuration? configuration;
@@ -87,15 +88,7 @@ class _ConfigurationScreenState extends State<ConfigurationScreen> {
                 border: OutlineInputBorder(),
                 prefixIcon: Icon(Icons.label),
               ),
-              validator: (value) {
-                if (value == null || value.trim().isEmpty) {
-                  return 'Please enter a configuration name';
-                }
-                if (value.length > 50) {
-                  return 'Name must be 50 characters or less';
-                }
-                return null;
-              },
+              validator: (value) => Validators.validateConfigurationName(value),
             ),
             const SizedBox(height: 24),
 
@@ -182,16 +175,7 @@ class _ConfigurationScreenState extends State<ConfigurationScreen> {
           prefixIcon: Icon(Icons.dns),
         ),
         keyboardType: TextInputType.url,
-        validator: (value) {
-          if (value == null || value.trim().isEmpty) {
-            return 'Please enter server URL';
-          }
-          final uri = Uri.tryParse(value);
-          if (uri == null || !uri.hasAbsolutePath) {
-            return 'Please enter a valid URL';
-          }
-          return null;
-        },
+        validator: (value) => Validators.validateXtreamServerUrl(value),
       ),
       const SizedBox(height: 16),
       TextFormField(
@@ -201,12 +185,7 @@ class _ConfigurationScreenState extends State<ConfigurationScreen> {
           border: OutlineInputBorder(),
           prefixIcon: Icon(Icons.person),
         ),
-        validator: (value) {
-          if (value == null || value.trim().isEmpty) {
-            return 'Please enter username';
-          }
-          return null;
-        },
+        validator: (value) => Validators.validateXtreamUsername(value),
       ),
       const SizedBox(height: 16),
       TextFormField(
@@ -217,12 +196,7 @@ class _ConfigurationScreenState extends State<ConfigurationScreen> {
           prefixIcon: Icon(Icons.lock),
         ),
         obscureText: true,
-        validator: (value) {
-          if (value == null || value.trim().isEmpty) {
-            return 'Please enter password';
-          }
-          return null;
-        },
+        validator: (value) => Validators.validateXtreamPassword(value),
       ),
     ];
   }
@@ -238,16 +212,7 @@ class _ConfigurationScreenState extends State<ConfigurationScreen> {
           prefixIcon: Icon(Icons.link),
         ),
         keyboardType: TextInputType.url,
-        validator: (value) {
-          if (value == null || value.trim().isEmpty) {
-            return 'Please enter M3U URL';
-          }
-          final uri = Uri.tryParse(value);
-          if (uri == null || !uri.hasAbsolutePath) {
-            return 'Please enter a valid URL';
-          }
-          return null;
-        },
+        validator: (value) => Validators.validateM3UNetworkUrl(value),
       ),
     ];
   }
@@ -267,12 +232,7 @@ class _ConfigurationScreenState extends State<ConfigurationScreen> {
           ),
         ),
         readOnly: true,
-        validator: (value) {
-          if (value == null || value.trim().isEmpty) {
-            return 'Please select an M3U file';
-          }
-          return null;
-        },
+        validator: (value) => Validators.validateFilePath(value),
       ),
     ];
   }

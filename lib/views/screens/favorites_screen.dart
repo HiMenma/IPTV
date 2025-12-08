@@ -12,21 +12,45 @@ class FavoritesScreen extends StatefulWidget {
   State<FavoritesScreen> createState() => _FavoritesScreenState();
 }
 
-class _FavoritesScreenState extends State<FavoritesScreen> {
+class _FavoritesScreenState extends State<FavoritesScreen> with AutomaticKeepAliveClientMixin {
+  @override
+  bool get wantKeepAlive => true;
+
   @override
   void initState() {
     super.initState();
+    _loadData();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // Reload data when the screen becomes visible
+    _loadData();
+  }
+
+  void _loadData() {
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      context.read<ChannelViewModel>().loadFavorites();
+      if (mounted) {
+        context.read<ChannelViewModel>().loadFavorites();
+      }
     });
   }
 
   @override
   Widget build(BuildContext context) {
+    super.build(context); // Required for AutomaticKeepAliveClientMixin
     return Scaffold(
       appBar: AppBar(
         title: const Text('Favorites'),
         backgroundColor: Theme.of(context).colorScheme.inversePrimary,
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.refresh),
+            onPressed: () => context.read<ChannelViewModel>().loadFavorites(),
+            tooltip: 'Refresh',
+          ),
+        ],
       ),
       body: Consumer<ChannelViewModel>(
         builder: (context, viewModel, child) {

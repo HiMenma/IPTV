@@ -189,11 +189,18 @@ class _ChannelListScreenState extends State<ChannelListScreen> {
                         cacheExtent: 500.0,
                         itemBuilder: (context, index) {
                           final channel = filteredChannels[index];
-                          return ChannelItem(
-                            key: ValueKey(channel.id),
-                            channel: channel,
-                            onTap: () => _playChannel(context, channel),
-                            showFavoriteButton: false,
+                          return Consumer<ChannelViewModel>(
+                            builder: (context, channelViewModel, child) {
+                              final isFavorite = channelViewModel.isFavorite(channel.id);
+                              return ChannelItem(
+                                key: ValueKey(channel.id),
+                                channel: channel,
+                                onTap: () => _playChannel(context, channel),
+                                isFavorite: isFavorite,
+                                onToggleFavorite: () => _toggleFavorite(context, channel),
+                                showFavoriteButton: true,
+                              );
+                            },
                           );
                         },
                       ),
@@ -242,6 +249,37 @@ class _ChannelListScreenState extends State<ChannelListScreen> {
         builder: (context) => PlayerScreen(channel: channel),
       ),
     );
+  }
+
+  Future<void> _toggleFavorite(BuildContext context, Channel channel) async {
+    try {
+      final viewModel = context.read<ChannelViewModel>();
+      final wasFavorite = viewModel.isFavorite(channel.id);
+      
+      await viewModel.toggleFavorite(channel.id);
+      
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              wasFavorite 
+                ? 'Removed "${channel.name}" from favorites'
+                : 'Added "${channel.name}" to favorites'
+            ),
+            duration: const Duration(seconds: 2),
+          ),
+        );
+      }
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to update favorite: $e'),
+            backgroundColor: Theme.of(context).colorScheme.error,
+          ),
+        );
+      }
+    }
   }
 
   Future<void> _refreshConfiguration() async {

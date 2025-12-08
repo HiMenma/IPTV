@@ -19,6 +19,7 @@ class ChannelViewModel extends ChangeNotifier {
   List<Channel> _channels = [];
   List<Channel> _favorites = [];
   List<Channel> _history = [];
+  Set<String> _favoriteIds = {};
   bool _isLoading = false;
   String? _error;
 
@@ -75,12 +76,25 @@ class ChannelViewModel extends ChangeNotifier {
           _channels = await _m3uService.parseLocalFile(filePath, config.id);
           break;
       }
+      
+      // Load favorite IDs for quick lookup
+      await _loadFavoriteIds();
     } catch (e) {
       _error = 'Failed to load channels: $e';
       _channels = [];
     } finally {
       _isLoading = false;
       notifyListeners();
+    }
+  }
+
+  /// Load favorite IDs into memory for quick lookup
+  Future<void> _loadFavoriteIds() async {
+    try {
+      final favoriteRecords = await _favoriteRepository.getAll();
+      _favoriteIds = favoriteRecords.map((f) => f.channelId).toSet();
+    } catch (e) {
+      _favoriteIds = {};
     }
   }
 
@@ -92,6 +106,7 @@ class ChannelViewModel extends ChangeNotifier {
 
     try {
       final favoriteRecords = await _favoriteRepository.getAll();
+      _favoriteIds = favoriteRecords.map((f) => f.channelId).toSet();
       
       // Get all configurations to find channels
       final configs = await _configRepository.getAll();
@@ -135,7 +150,7 @@ class ChannelViewModel extends ChangeNotifier {
       
       // Filter channels that are in favorites
       _favorites = allChannels
-          .where((channel) => favoriteRecords.any((fav) => fav.channelId == channel.id))
+          .where((channel) => _favoriteIds.contains(channel.id))
           .toList();
     } catch (e) {
       _error = 'Failed to load favorites: $e';
@@ -213,19 +228,31 @@ class ChannelViewModel extends ChangeNotifier {
     }
   }
 
+  /// Check if a channel is favorited (synchronous, uses cached data)
+  bool isFavorite(String channelId) {
+    return _favoriteIds.contains(channelId);
+  }
+
   /// Toggle favorite status of a channel
   Future<void> toggleFavorite(String channelId) async {
     try {
-      final isFavorite = await _favoriteRepository.isFavorite(channelId);
+      final wasFavorite = _favoriteIds.contains(channelId);
       
-      if (isFavorite) {
+      if (wasFavorite) {
         await _favoriteRepository.remove(channelId);
+        _favoriteIds.remove(channelId);
       } else {
         await _favoriteRepository.add(channelId);
+        _favoriteIds.add(channelId);
       }
       
-      // Reload favorites to update the list
-      await loadFavorites();
+      // Reload favorites list if we're on the favorites screen
+      if (_favorites.isNotEmpty || wasFavorite) {
+        await loadFavorites();
+      }
+      
+      // Notify listeners to update UI
+      notifyListeners();
     } catch (e) {
       _error = 'Failed to toggle favorite: $e';
       notifyListeners();

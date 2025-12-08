@@ -39,6 +39,12 @@ void main() {
       expect(Validators.validateUrl('https://example.com/path/to/file'), null);
     });
 
+    test('valid Xtream-style URLs with port returns null', () {
+      expect(Validators.validateUrl('http://xxx.com:8080'), null);
+      expect(Validators.validateUrl('http://192.168.1.1:8080'), null);
+      expect(Validators.validateUrl('https://server.example.com:25461'), null);
+    });
+
     test('empty URL returns error', () {
       expect(Validators.validateUrl(''), isNotNull);
       expect(Validators.validateUrl('   '), isNotNull);
