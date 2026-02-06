@@ -1,59 +1,33 @@
-# Gradle
-.gradle/
-build/
-!gradle/wrapper/gradle-wrapper.jar
+# Miscellaneous
+*.class
+*.log
+*.pyc
+*.swp
+.DS_Store
+.atom/
+.build/
+.buildlog/
+.history
+.svn/
+.swiftpm/
+migrate_working_dir/
 
-# IDEA
-.idea/
+# IntelliJ related
 *.iml
 *.ipr
 *.iws
+.idea/
 .idea_modules/
-
-# macOS
-.DS_Store
-
-# Android
-*.apk
-*.ap_
-*.dex
-local.properties
-
-# Kotlin
-*.kotlin_module
-
-# Logs
-*.log
-run.log
-
-# Generated files
-bin/
-gen/
 out/
 
-# Keystore files
-*.jks
-*.keystore
-
-# External native build folder generated in Android Studio 2.2 and later
-.externalNativeBuild
-.cxx/
-
-# Version control
-.svn/
-
-# IntelliJ
-out/
-.idea_modules/
-
-# User-specific stuff
+# IntelliJ User-specific stuff
 .idea/**/workspace.xml
 .idea/**/tasks.xml
 .idea/**/usage.statistics.xml
 .idea/**/dictionaries
 .idea/**/shelf
 
-# Sensitive or high-churn files
+# IntelliJ Sensitive or high-churn files
 .idea/**/dataSources/
 .idea/**/dataSources.ids
 .idea/**/dataSources.local.xml
@@ -61,3 +35,185 @@ out/
 .idea/**/dynamic.xml
 .idea/**/uiDesigner.xml
 .idea/**/dbnavigator.xml
+
+# Visual Studio Code related
+.vscode/
+*.code-workspace
+
+# Flutter/Dart/Pub related
+**/doc/api/
+**/ios/Flutter/.last_build_id
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+.packages
+.pub-cache/
+.pub/
+/build/
+
+# Symbolication related
+app.*.symbols
+
+# Obfuscation related
+app.*.map.json
+
+# Android Studio will place build artifacts here
+/android/app/debug
+/android/app/profile
+/android/app/release
+
+# Android related
+*.apk
+*.ap_
+*.aab
+*.dex
+local.properties
+android/.gradle/
+android/gradle/
+android/gradlew
+android/gradlew.bat
+android/local.properties
+android/app/google-services.json
+android/key.properties
+android/.idea/
+android/captures/
+android/app/release/
+
+# Gradle
+.gradle/
+build/
+!gradle/wrapper/gradle-wrapper.jar
+
+# iOS/XCode related
+**/ios/**/*.mode1v3
+**/ios/**/*.mode2v3
+**/ios/**/*.moved-aside
+**/ios/**/*.pbxuser
+**/ios/**/*.perspectivev3
+**/ios/**/*sync/
+**/ios/**/.sconsign.dblite
+**/ios/**/.tags*
+**/ios/**/.vagrant/
+**/ios/**/DerivedData/
+**/ios/**/Icon?
+**/ios/**/Pods/
+**/ios/**/.symlinks/
+**/ios/**/profile
+**/ios/**/xcuserdata
+**/ios/.generated/
+**/ios/Flutter/.last_build_id
+**/ios/Flutter/App.framework
+**/ios/Flutter/Flutter.framework
+**/ios/Flutter/Flutter.podspec
+**/ios/Flutter/Generated.xcconfig
+**/ios/Flutter/ephemeral/
+**/ios/Flutter/app.flx
+**/ios/Flutter/app.zip
+**/ios/Flutter/flutter_assets/
+**/ios/Flutter/flutter_export_environment.sh
+**/ios/ServiceDefinitions.json
+**/ios/Runner/GeneratedPluginRegistrant.*
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+Icon
+._*
+.DocumentRevisions-V100
+.fseventsd
+.Spotlight-V100
+.TemporaryItems
+.Trashes
+.VolumeIcon.icns
+.com.apple.timemachine.donotpresent
+.AppleDB
+.AppleDesktop
+Network Trash Folder
+Temporary Items
+.apdisk
+
+# macOS/iOS build artifacts
+**/macos/Flutter/ephemeral/
+**/macos/Flutter/GeneratedPluginRegistrant.swift
+**/macos/Pods/
+**/macos/Runner.xcworkspace/
+**/macos/.symlinks/
+
+# Swift Package Manager
+.swiftpm/
+**/DerivedData/
+**/.build/
+**/Package.resolved
+
+# Web related
+lib/generated_plugin_registrant.dart
+
+# Windows related
+**/windows/flutter/ephemeral/
+
+# Linux related
+**/linux/flutter/ephemeral/
+
+# Coverage
+coverage/
+
+# Exceptions to above rules
+!**/ios/**/default.mode1v3
+!**/ios/**/default.mode2v3
+!**/ios/**/default.pbxuser
+!**/ios/**/default.perspectivev3
+
+# Keystore files (keep release.keystore.base64 for CI/CD)
+*.jks
+*.keystore
+!release.keystore
+!release.keystore.base64
+
+# Kotlin
+*.kotlin_module
+.kotlin/
+
+# External native build folder generated in Android Studio 2.2 and later
+.externalNativeBuild
+.cxx/
+
+# Generated files
+bin/
+gen/
+out/
+
+# Logs
+*.log
+run.log
+
+# Test related
+.test_coverage.dart
+
+# Documentation
+doc/api/
+
+# Environment files
+.env
+.env.local
+.env.*.local
+
+# Firebase
+**/google-services.json
+**/GoogleService-Info.plist
+firebase_options.dart
+
+# Temporary files
+*.tmp
+*.temp
+*.bak
+*.swp
+*~
+
+# Database files
+*.db
+*.sqlite
+*.sqlite3
+
+# Cache
+.cache/

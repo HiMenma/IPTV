@@ -1,510 +1,407 @@
 # IPTV Player 打包指南
 
-本文档介绍如何为 Android、macOS 和 Windows 平台打包 IPTV Player 应用程序。
+本文档说明如何在 macOS ARM 环境下为各个平台打包 IPTV Player 应用的安装包。
 
-## 目录
+## 环境要求
 
-- [前置要求](#前置要求)
-- [Android 打包](#android-打包)
-- [macOS 打包](#macos-打包)
-- [Windows 打包](#windows-打包)
-- [常见问题](#常见问题)
+- macOS ARM (Apple Silicon)
+- Flutter SDK (已安装)
+- Android Studio (已安装)
+- Xcode (用于 iOS/macOS 打包)
 
----
+## 打包前准备
 
-## 前置要求
-
-### 通用要求
-
-- **JDK**: Java Development Kit 17 或更高版本
-- **Gradle**: 项目已包含 Gradle Wrapper，无需单独安装
-- **Git**: 用于版本控制
-
-验证 Java 版本：
-```bash
-java -version
-```
-
-### Android 特定要求
-
-- **Android SDK**: Android SDK 34 (通过 Android Studio 安装)
-- **Android Studio**: 推荐使用最新稳定版
-- **签名密钥**: 用于发布版本的密钥库文件
-
-### macOS 特定要求
-
-- **操作系统**: macOS 10.14 或更高版本
-- **Xcode Command Line Tools**: 用于代码签名
-  ```bash
-  xcode-select --install
-  ```
-
-### Windows 特定要求
-
-- **WiX Toolset**: 用于创建 MSI 安装包
-  - 下载地址: https://wixtoolset.org/releases/
-  - 安装后需要将 WiX 添加到系统 PATH
-
----
-
-## Android 打包
-
-### 1. 调试版本 (Debug APK)
-
-调试版本用于开发和测试，无需签名配置。
+### 1. 检查 Flutter 环境
 
 ```bash
-# 构建调试 APK
-./gradlew :composeApp:assembleDebug
-
-# 输出位置
-# composeApp/build/outputs/apk/debug/composeApp-debug.apk
+flutter doctor -v
 ```
 
-### 2. 发布版本 (Release APK)
+确保所有必需的工具链都已正确安装。
 
-#### 2.1 创建签名密钥
-
-如果还没有签名密钥，需要先创建：
+### 2. 清理项目
 
 ```bash
-keytool -genkey -v -keystore iptv-release-key.jks \
-  -keyalg RSA -keysize 2048 -validity 10000 \
-  -alias iptv-key
+flutter clean
+flutter pub get
 ```
 
-按提示输入密钥库密码和密钥信息。
-
-#### 2.2 配置签名信息
-
-在项目根目录创建 `keystore.properties` 文件（不要提交到 Git）：
-
-```properties
-storePassword=你的密钥库密码
-keyPassword=你的密钥密码
-keyAlias=iptv-key
-storeFile=../iptv-release-key.jks
-```
-
-#### 2.3 更新 build.gradle.kts
-
-在 `composeApp/build.gradle.kts` 的 `android` 块中添加签名配置：
-
-```kotlin
-android {
-    // ... 现有配置 ...
-    
-    signingConfigs {
-        create("release") {
-            val keystorePropertiesFile = rootProject.file("keystore.properties")
-            if (keystorePropertiesFile.exists()) {
-                val keystoreProperties = java.util.Properties()
-                keystoreProperties.load(java.io.FileInputStream(keystorePropertiesFile))
-                
-                storeFile = file(keystoreProperties["storeFile"] as String)
-                storePassword = keystoreProperties["storePassword"] as String
-                keyAlias = keystoreProperties["keyAlias"] as String
-                keyPassword = keystoreProperties["keyPassword"] as String
-            }
-        }
-    }
-    
-    buildTypes {
-        getByName("release") {
-            isMinifyEnabled = true
-            isShrinkResources = true
-            proguardFiles(
-                getDefaultProguardFile("proguard-android-optimize.txt"),
-                "proguard-rules.pro"
-            )
-            signingConfig = signingConfigs.getByName("release")
-        }
-    }
-}
-```
-
-#### 2.4 构建发布 APK
+### 3. 生成应用图标和启动画面
 
 ```bash
-# 构建发布 APK
-./gradlew :composeApp:assembleRelease
+# 生成应用图标
+dart run flutter_launcher_icons
 
-# 输出位置
-# composeApp/build/outputs/apk/release/composeApp-release.apk
+# 生成启动画面
+dart run flutter_native_splash:create
 ```
 
-### 3. Android App Bundle (AAB)
+## 各平台打包说明
 
-用于 Google Play 发布：
+### 📱 Android 打包
+
+#### APK 打包（用于测试和直接分发）
 
 ```bash
-# 构建 AAB
-./gradlew :composeApp:bundleRelease
+# 构建 Release APK
+flutter build apk --release
 
-# 输出位置
-# composeApp/build/outputs/bundle/release/composeApp-release.aab
+# 构建分架构的 APK（体积更小）
+flutter build apk --split-per-abi --release
 ```
 
-### 4. 安装和测试
+生成的文件位置：
+- 通用 APK: `build/app/outputs/flutter-apk/app-release.apk`
+- 分架构 APK: `build/app/outputs/flutter-apk/app-armeabi-v7a-release.apk`、`app-arm64-v8a-release.apk`、`app-x86_64-release.apk`
+
+#### AAB 打包（用于 Google Play 商店）
 
 ```bash
-# 通过 ADB 安装到设备
-adb install composeApp/build/outputs/apk/release/composeApp-release.apk
-
-# 或使用 Gradle 直接安装
-./gradlew :composeApp:installRelease
+# 构建 Android App Bundle
+flutter build appbundle --release
 ```
 
----
+生成的文件位置：`build/app/outputs/bundle/release/app-release.aab`
 
-## macOS 打包
+#### 签名说明
 
-### 1. 构建 DMG 安装包
+项目已配置签名密钥（`release.keystore`），打包时会自动签名。如需修改签名配置，编辑 `android/app/build.gradle.kts` 文件。
+
+### 🍎 iOS 打包
+
+**注意：** 需要 Apple Developer 账号和证书。
+
+#### 1. 在 Xcode 中配置
 
 ```bash
-# 构建 macOS DMG 包
-./gradlew :composeApp:packageDmg
-
-# 输出位置
-# composeApp/build/compose/binaries/main/dmg/IPTV-Player-1.0.dmg
+# 打开 iOS 项目
+open ios/Runner.xcworkspace
 ```
 
-### 2. 配置应用信息
+在 Xcode 中：
+1. 选择 Runner 项目
+2. 在 Signing & Capabilities 中配置 Team 和 Bundle Identifier
+3. 确保选择正确的 Provisioning Profile
 
-在 `composeApp/build.gradle.kts` 中自定义 macOS 配置：
-
-```kotlin
-compose.desktop {
-    application {
-        mainClass = "MainKt"
-
-        nativeDistributions {
-            targetFormats(TargetFormat.Dmg)
-            packageName = "IPTV-Player"
-            packageVersion = "1.0.0"
-            description = "IPTV 播放器应用"
-            copyright = "© 2024 MenmaPro. All rights reserved."
-            vendor = "MenmaPro"
-            
-            macOS {
-                bundleID = "com.menmapro.iptv"
-                iconFile.set(project.file("src/desktopMain/resources/icon.icns"))
-                
-                // 最低系统版本
-                minimumSystemVersion = "10.14"
-                
-                // 应用分类
-                appCategory = "public.app-category.entertainment"
-                
-                // 代码签名（可选，用于分发）
-                // signing {
-                //     sign.set(true)
-                //     identity.set("Developer ID Application: Your Name")
-                // }
-            }
-        }
-    }
-}
-```
-
-### 3. 代码签名（可选）
-
-如果需要在 macOS 上分发应用，需要进行代码签名：
+#### 2. 构建 iOS 应用
 
 ```bash
-# 查看可用的签名身份
-security find-identity -v -p codesigning
+# 构建 iOS Release 版本
+flutter build ios --release --no-codesign
 
-# 手动签名应用
-codesign --force --deep --sign "Developer ID Application: Your Name" \
-  composeApp/build/compose/binaries/main/app/IPTV-Player.app
-
-# 验证签名
-codesign --verify --verbose composeApp/build/compose/binaries/main/app/IPTV-Player.app
+# 或者直接构建 IPA（需要配置好签名）
+flutter build ipa --release
 ```
 
-### 4. 公证（Notarization）
+生成的文件位置：`build/ios/ipa/iptv_player.ipa`
 
-对于 macOS 10.15+ 的分发，需要进行公证：
+#### 3. 通过 Xcode 打包
+
+1. 在 Xcode 中选择 Product > Archive
+2. 等待归档完成
+3. 在 Organizer 中选择归档，点击 Distribute App
+4. 选择分发方式（App Store、Ad Hoc、Enterprise 等）
+
+### 🖥️ macOS 打包
+
+#### 前置要求
+
+首次构建 macOS 应用需要安装 CocoaPods：
 
 ```bash
-# 创建 DMG 后进行公证
-xcrun notarytool submit composeApp/build/compose/binaries/main/dmg/IPTV-Player-1.0.dmg \
-  --apple-id "your-apple-id@example.com" \
+# 使用 Homebrew 安装 CocoaPods
+brew install cocoapods
+
+# 安装 macOS 平台依赖
+cd macos && pod install && cd ..
+```
+
+#### 1. 构建 macOS 应用
+
+```bash
+# 构建 macOS Release 版本
+flutter build macos --release
+```
+
+生成的文件位置：`build/macos/Build/Products/Release/IPTV Player.app`
+
+**注意：** 应用已配置支持 HTTP 连接，可以播放 HTTP 和 HTTPS 协议的 IPTV 流。配置位于 `macos/Runner/Info.plist` 中的 `NSAppTransportSecurity` 设置。
+
+#### 2. 创建 DMG 安装包（可选）
+
+可以使用 `create-dmg` 工具创建 DMG 安装包：
+
+```bash
+# 安装 create-dmg
+brew install create-dmg
+
+# 创建 DMG
+create-dmg \
+  --volname "IPTV Player" \
+  --window-pos 200 120 \
+  --window-size 800 400 \
+  --icon-size 100 \
+  --icon "IPTV Player.app" 200 190 \
+  --hide-extension "IPTV Player.app" \
+  --app-drop-link 600 185 \
+  "IPTV-Player-1.0.0.dmg" \
+  "build/macos/Build/Products/Release/IPTV Player.app"
+```
+
+#### 3. 代码签名（可选，用于分发）
+
+```bash
+# 签名应用
+codesign --deep --force --verify --verbose --sign "Developer ID Application: Your Name" \
+  "build/macos/Build/Products/Release/IPTV Player.app"
+
+# 公证应用（需要 Apple Developer 账号）
+xcrun notarytool submit IPTV-Player-1.0.0.dmg \
+  --apple-id "your-email@example.com" \
   --team-id "YOUR_TEAM_ID" \
-  --password "app-specific-password" \
-  --wait
-
-# 装订公证票据
-xcrun stapler staple composeApp/build/compose/binaries/main/dmg/IPTV-Player-1.0.dmg
+  --password "app-specific-password"
 ```
 
----
+### 🐧 Linux 打包
 
-## Windows 打包
-
-### 1. 安装 WiX Toolset
-
-下载并安装 WiX Toolset 3.11 或更高版本：
-- 下载地址: https://wixtoolset.org/releases/
-- 安装后确保 WiX 的 bin 目录在系统 PATH 中
-
-验证安装：
-```bash
-candle -?
-```
-
-### 2. 构建 MSI 安装包
+#### 1. 构建 Linux 应用
 
 ```bash
-# 构建 Windows MSI 包
-./gradlew :composeApp:packageMsi
-
-# 输出位置
-# composeApp/build/compose/binaries/main/msi/IPTV-Player-1.0.msi
+# 构建 Linux Release 版本
+flutter build linux --release
 ```
 
-### 3. 配置 Windows 特定选项
+生成的文件位置：`build/linux/x64/release/bundle/`
 
-在 `composeApp/build.gradle.kts` 中添加 Windows 配置：
-
-```kotlin
-compose.desktop {
-    application {
-        mainClass = "MainKt"
-
-        nativeDistributions {
-            targetFormats(TargetFormat.Msi)
-            packageName = "IPTV-Player"
-            packageVersion = "1.0.0"
-            description = "IPTV 播放器应用"
-            copyright = "© 2024 MenmaPro. All rights reserved."
-            vendor = "MenmaPro"
-            
-            windows {
-                iconFile.set(project.file("src/desktopMain/resources/icon.ico"))
-                
-                // 菜单组
-                menuGroup = "IPTV Player"
-                
-                // 升级 UUID（保持不变以支持升级）
-                upgradeUuid = "YOUR-UNIQUE-UUID-HERE"
-                
-                // 快捷方式
-                shortcut = true
-                dirChooser = true
-                
-                // 每用户安装
-                perUserInstall = true
-            }
-        }
-    }
-}
-```
-
-### 4. 构建 EXE 包（可选）
-
-如果需要便携式 EXE 而不是安装程序：
+#### 2. 创建可分发的压缩包
 
 ```bash
-# 构建可执行文件
-./gradlew :composeApp:createDistributable
+# 进入构建目录
+cd build/linux/x64/release/
 
-# 输出位置
-# composeApp/build/compose/binaries/main/app/
+# 创建 tar.gz 压缩包
+tar -czf iptv-player-1.0.0-linux-x64.tar.gz bundle/
+
+# 或创建 zip 压缩包
+zip -r iptv-player-1.0.0-linux-x64.zip bundle/
 ```
 
-### 5. 代码签名（可选）
+#### 3. 创建 AppImage（推荐）
 
-使用 SignTool 对 MSI 进行签名：
+需要在 Linux 环境下使用 `appimagetool`：
 
 ```bash
-# 使用证书签名
-signtool sign /f "your-certificate.pfx" /p "password" /t http://timestamp.digicert.com \
-  composeApp/build/compose/binaries/main/msi/IPTV-Player-1.0.msi
+# 创建 AppDir 结构
+mkdir -p AppDir/usr/bin
+cp -r build/linux/x64/release/bundle/* AppDir/usr/bin/
+
+# 创建 desktop 文件
+cat > AppDir/iptv_player.desktop << EOF
+[Desktop Entry]
+Name=IPTV Player
+Exec=iptv_player
+Icon=iptv_player
+Type=Application
+Categories=AudioVideo;Player;
+EOF
+
+# 复制图标
+cp icon/tv.png AppDir/iptv_player.png
+
+# 使用 appimagetool 创建 AppImage
+appimagetool AppDir iptv-player-1.0.0-x86_64.AppImage
 ```
 
----
+### 🌐 Web 打包
 
-## 一次性构建所有平台
-
-### 构建所有桌面平台
+#### 1. 构建 Web 应用
 
 ```bash
-# 构建所有配置的平台
-./gradlew :composeApp:packageDistributionForCurrentOS
-
-# 或构建所有平台（需要在对应系统上运行）
-./gradlew :composeApp:package
+# 构建 Web Release 版本
+flutter build web --release
 ```
 
-### 完整构建脚本
+生成的文件位置：`build/web/`
 
-创建 `build-all.sh` 脚本：
+#### 2. 部署到服务器
+
+将 `build/web/` 目录下的所有文件上传到 Web 服务器即可。
+
+#### 3. 本地测试
 
 ```bash
-#!/bin/bash
+# 使用 Python 启动本地服务器
+cd build/web
+python3 -m http.server 8000
 
-echo "开始构建 IPTV Player..."
-
-# 清理之前的构建
-./gradlew clean
-
-# 构建 Android
-echo "构建 Android APK..."
-./gradlew :composeApp:assembleRelease
-
-# 构建 Android AAB
-echo "构建 Android AAB..."
-./gradlew :composeApp:bundleRelease
-
-# 构建桌面平台（根据当前操作系统）
-echo "构建桌面应用..."
-./gradlew :composeApp:packageDistributionForCurrentOS
-
-echo "构建完成！"
-echo "输出文件位置："
-echo "  Android APK: composeApp/build/outputs/apk/release/"
-echo "  Android AAB: composeApp/build/outputs/bundle/release/"
-echo "  桌面应用: composeApp/build/compose/binaries/main/"
+# 或使用 Node.js
+npx serve
 ```
 
-赋予执行权限：
+然后在浏览器中访问 `http://localhost:8000`
+
+### 🪟 Windows 打包
+
+**注意：** 在 macOS 上无法直接构建 Windows 应用，需要在 Windows 环境下进行。
+
+如果你有 Windows 环境，可以执行：
+
 ```bash
-chmod +x build-all.sh
-./build-all.sh
+# 构建 Windows Release 版本
+flutter build windows --release
 ```
 
----
+生成的文件位置：`build/windows/x64/runner/Release/`
 
-## 常见问题
-
-### 1. VLC 依赖问题（桌面版）
-
-桌面版使用 VLCJ 播放视频，用户需要安装 VLC：
-
-**macOS:**
-```bash
-brew install --cask vlc
-```
-
-**Windows:**
-- 下载并安装 VLC: https://www.videolan.org/vlc/
-
-**在安装包中包含说明:**
-在应用首次启动时检测 VLC 并提示用户安装。
-
-### 2. 构建失败：内存不足
-
-增加 Gradle 内存：
-
-编辑 `gradle.properties`：
-```properties
-org.gradle.jvmargs=-Xmx4096m -XX:MaxMetaspaceSize=512m
-```
-
-### 3. Android 签名错误
-
-确保 `keystore.properties` 文件路径正确，且密钥库文件存在。
-
-### 4. macOS 无法打开应用（安全限制）
-
-用户首次打开时可能遇到安全提示：
-```bash
-# 用户可以通过以下命令允许应用运行
-xattr -cr /Applications/IPTV-Player.app
-```
-
-或在"系统偏好设置 > 安全性与隐私"中允许。
-
-### 5. Windows Defender 误报
-
-未签名的应用可能被 Windows Defender 标记。建议：
-- 对应用进行代码签名
-- 在发布说明中告知用户这是误报
-
-### 6. 构建速度慢
-
-启用 Gradle 构建缓存和并行构建：
-
-编辑 `gradle.properties`：
-```properties
-org.gradle.caching=true
-org.gradle.parallel=true
-org.gradle.configureondemand=true
-```
-
----
+可以使用 Inno Setup 或 NSIS 创建安装程序。
 
 ## 版本管理
 
-### 更新版本号
+### 修改版本号
 
-在 `composeApp/build.gradle.kts` 中更新：
+编辑 `pubspec.yaml` 文件中的 `version` 字段：
 
-```kotlin
-android {
-    defaultConfig {
-        versionCode = 2  // 每次发布递增
-        versionName = "1.1.0"  // 语义化版本
-    }
-}
-
-compose.desktop {
-    application {
-        nativeDistributions {
-            packageVersion = "1.1.0"
-        }
-    }
-}
+```yaml
+version: 1.0.0+1
 ```
 
-### 版本命名规范
+格式：`主版本.次版本.修订号+构建号`
 
-遵循语义化版本 (Semantic Versioning)：
-- **主版本号**: 不兼容的 API 变更
-- **次版本号**: 向后兼容的功能新增
-- **修订号**: 向后兼容的问题修正
+### 使用命令行指定版本
 
-例如: `1.2.3`
+```bash
+flutter build apk --build-name=1.0.1 --build-number=2
+```
 
----
+## 快速打包脚本
 
-## 发布检查清单
+你可以创建一个脚本来自动化打包流程：
+
+```bash
+#!/bin/bash
+# build_all.sh
+
+echo "🧹 清理项目..."
+flutter clean
+flutter pub get
+
+echo "🎨 生成图标和启动画面..."
+dart run flutter_launcher_icons
+dart run flutter_native_splash:create
+
+echo "📱 构建 Android APK..."
+flutter build apk --split-per-abi --release
+
+echo "🖥️  构建 macOS 应用..."
+flutter build macos --release
+
+echo "🌐 构建 Web 应用..."
+flutter build web --release
+
+echo "✅ 打包完成！"
+echo "Android APK: build/app/outputs/flutter-apk/"
+echo "macOS App: build/macos/Build/Products/Release/"
+echo "Web: build/web/"
+```
+
+使用方法：
+
+```bash
+chmod +x build_all.sh
+./build_all.sh
+```
+
+## 常见问题
+
+### 1. Android R8 混淆错误（Missing classes）
+
+**错误信息：** `Missing class com.aliyun.** / com.google.android.play.core.**`
+
+**解决方案：** 项目已配置 ProGuard 规则（`android/app/proguard-rules.pro`），如果仍有问题：
+
+```bash
+# 清理项目
+flutter clean
+cd android && ./gradlew clean && cd ..
+
+# 重新获取依赖
+flutter pub get
+
+# 重新构建
+flutter build apk --release
+```
+
+### 2. Java 版本警告
+
+**警告信息：** `源值 8 已过时`
+
+这是正常的警告，不影响构建。项目已配置使用 Java 17。
+
+### 3. Android 构建失败
+
+- 检查 Java 版本：`java -version`（需要 Java 17）
+- 清理 Gradle 缓存：`cd android && ./gradlew clean`
+- 删除 `.gradle` 文件夹：`rm -rf ~/.gradle/caches/`
+
+### 4. iOS/macOS 构建失败
+
+- 安装/更新 CocoaPods：`brew install cocoapods` 或 `sudo gem install cocoapods`
+- 清理 iOS Pods：`cd ios && rm -rf Pods Podfile.lock && pod install && cd ..`
+- 清理 macOS Pods：`cd macos && rm -rf Pods Podfile.lock && pod install && cd ..`
+- 如果遇到 "CocoaPods not installed" 错误，确保已安装 CocoaPods 并重新运行 `pod install`
+
+### 5. 构建体积过大
+
+- 使用 `--split-per-abi` 为 Android 构建分架构 APK（推荐）
+- 启用代码混淆：`flutter build apk --obfuscate --split-debug-info=build/debug-info`
+
+### 6. 阿里云播放器插件问题
+
+如果遇到播放器相关的构建问题，确保：
+- 网络连接正常（需要从 GitHub 拉取插件）
+- 已正确配置各平台的原生依赖
+- ProGuard 规则已正确配置
+
+## 测试打包结果
 
 ### Android
-- [ ] 更新版本号 (versionCode 和 versionName)
-- [ ] 测试发布版本 APK
-- [ ] 检查 ProGuard 规则
-- [ ] 准备应用商店截图和描述
-- [ ] 生成签名的 APK/AAB
+
+```bash
+# 安装到连接的设备
+flutter install
+
+# 或使用 adb
+adb install build/app/outputs/flutter-apk/app-release.apk
+```
 
 ### macOS
-- [ ] 更新版本号
-- [ ] 测试 DMG 安装
-- [ ] 验证应用图标
-- [ ] 代码签名（如需分发）
-- [ ] 公证（如需分发）
-- [ ] 测试在不同 macOS 版本上运行
 
-### Windows
+直接双击 `build/macos/Build/Products/Release/IPTV Player.app` 运行。
+
+### Web
+
+使用本地服务器测试（见上文 Web 打包部分）。
+
+## 发布清单
+
+在发布前确保：
+
 - [ ] 更新版本号
-- [ ] 测试 MSI 安装和卸载
-- [ ] 验证应用图标
-- [ ] 代码签名（推荐）
-- [ ] 测试在不同 Windows 版本上运行
-- [ ] 检查防病毒软件兼容性
+- [ ] 测试所有核心功能
+- [ ] 检查应用图标和启动画面
+- [ ] 准备应用商店截图和描述
+- [ ] 配置正确的签名证书
+- [ ] 测试打包后的应用
+- [ ] 准备更新日志
+
+## 相关资源
+
+- [Flutter 官方打包文档](https://docs.flutter.dev/deployment)
+- [Android 发布指南](https://docs.flutter.dev/deployment/android)
+- [iOS 发布指南](https://docs.flutter.dev/deployment/ios)
+- [macOS 发布指南](https://docs.flutter.dev/deployment/macos)
+- [Web 发布指南](https://docs.flutter.dev/deployment/web)
 
 ---
 
-## 技术支持
-
-如遇到构建问题，请检查：
-1. Java 和 Gradle 版本是否符合要求
-2. 所有依赖是否正确下载
-3. 构建日志中的错误信息
-4. 项目 GitHub Issues 中是否有类似问题
-
----
-
-**最后更新**: 2024-11-26
+**提示：** 在你的 macOS ARM 环境下，可以直接打包 Android、macOS 和 Web 版本。iOS 需要 Apple Developer 账号，Linux 建议在 Linux 环境下打包，Windows 需要在 Windows 环境下打包。
