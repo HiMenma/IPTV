@@ -1,7 +1,9 @@
 import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart';
-import 'dart:io';
+import 'dart:io' show File, Platform;
 import 'package:flutter/foundation.dart';
+import 'package:sqflite_common_ffi/sqflite_ffi.dart';
+import 'package:sqflite_common_ffi_web/sqflite_ffi_web.dart';
 
 /// Database helper for managing SQLite database
 class DatabaseHelper {
@@ -10,6 +12,19 @@ class DatabaseHelper {
 
   DatabaseHelper._init();
 
+  /// Initialize the database factory for the current platform.
+  /// Must be called before any database operation (ideally in main()).
+  static void initPlatformFactory() {
+    if (kIsWeb) {
+      databaseFactory = databaseFactoryFfiWeb;
+      debugPrint('Database: Global factory set to FfiWeb');
+    } else if (Platform.isWindows || Platform.isLinux) {
+      sqfliteFfiInit();
+      databaseFactory = databaseFactoryFfi;
+      debugPrint('Database: Global factory set to Ffi (Desktop)');
+    }
+  }
+
   Future<Database> get database async {
     if (_database != null) return _database!;
     _database = await _initDB('iptv_player.db');
@@ -17,8 +32,22 @@ class DatabaseHelper {
   }
 
   Future<Database> _initDB(String filePath) async {
-    final dbPath = await getDatabasesPath();
-    final path = join(dbPath, filePath);
+    String path;
+    
+    if (kIsWeb) {
+      // Ensure factory is set
+      databaseFactory = databaseFactoryFfiWeb;
+      path = filePath; // Web uses logical names
+    } else {
+      // Desktop/Mobile initialization
+      if (Platform.isWindows || Platform.isLinux) {
+        databaseFactory = databaseFactoryFfi;
+        sqfliteFfiInit();
+      }
+      
+      final dbPath = await getDatabasesPath();
+      path = join(dbPath, filePath);
+    }
 
     debugPrint('Database path: $path');
 
@@ -86,12 +115,6 @@ class DatabaseHelper {
 
   Future<void> _upgradeDB(Database db, int oldVersion, int newVersion) async {
     debugPrint('Upgrading database from version $oldVersion to $newVersion');
-    
-    // Handle future database migrations here
-    if (oldVersion < 2) {
-      // Example: Add new column
-      // await db.execute('ALTER TABLE configurations ADD COLUMN new_field TEXT');
-    }
   }
 
   /// Close the database
@@ -104,19 +127,23 @@ class DatabaseHelper {
 
   /// Delete the database (for testing or reset)
   Future<void> deleteDatabase() async {
-    final dbPath = await getDatabasesPath();
-    final path = join(dbPath, 'iptv_player.db');
-    
-    if (await File(path).exists()) {
-      await File(path).delete();
-      debugPrint('Database deleted');
+    if (kIsWeb) {
+      await databaseFactory.deleteDatabase('iptv_player.db');
+    } else {
+      final dbPath = await getDatabasesPath();
+      final path = join(dbPath, 'iptv_player.db');
+      if (await File(path).exists()) {
+        await File(path).delete();
+      }
     }
-    
     _database = null;
+    debugPrint('Database deleted');
   }
 
   /// Get database size
   Future<int> getDatabaseSize() async {
+    if (kIsWeb) return 0;
+    
     final dbPath = await getDatabasesPath();
     final path = join(dbPath, 'iptv_player.db');
     

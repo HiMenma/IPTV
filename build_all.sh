@@ -62,12 +62,22 @@ fi
 
 # 3. Web
 if [ "$BUILD_WEB" = true ]; then
-    echo -e "${BLUE}>>> 构建 Web...${NC}"
+    echo -e "${BLUE}>>> 正在准备 Web 数据库资源 (sqflite_sw.js, sqlite3.wasm)...${NC}"
+    # 使用官方工具生成资源到 web/ 目录
+    if dart run sqflite_common_ffi_web:setup; then
+        echo -e "${GREEN}[成功] 数据库资源已就绪${NC}"
+    else
+        echo -e "${RED}[错误] 数据库资源生成失败${NC}"
+    fi
+
+    echo -e "${BLUE}>>> 正在构建 Web...${NC}"
+
     if flutter build web --release; then
         (cd build/web && zip -r "$DIST_DIR/iptv_player_web_v$APP_VERSION.zip" .)
         echo -e "${GREEN}[成功] Web 产物已归档${NC}"
     fi
 fi
+
 
 echo -e "${GREEN}==========================================${NC}"
 echo -e "${GREEN}构建任务结束。产物位置: $DIST_DIR/${NC}"
