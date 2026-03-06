@@ -39,9 +39,9 @@ class ChannelViewModel extends ChangeNotifier {
         _xtreamService = xtreamService ?? XtreamService(),
         _m3uService = m3uService ?? M3UService();
 
-  List<Channel> get channels => List.unmodifiable(_channels);
-  List<Channel> get favorites => List.unmodifiable(_favorites);
-  List<Channel> get history => List.unmodifiable(_history);
+  List<Channel> get channels => _channels;
+  List<Channel> get favorites => _favorites;
+  List<Channel> get history => _history;
   bool get isLoading => _isLoading;
   String? get error => _error;
 
@@ -128,7 +128,6 @@ class ChannelViewModel extends ChangeNotifier {
   }
 
   /// Load favorite channels
-  /// Loads ONLY from SQLite cache, never from network
   Future<void> loadFavorites() async {
     _isLoading = true;
     _error = null;
@@ -138,38 +137,15 @@ class ChannelViewModel extends ChangeNotifier {
       final favoriteRecords = await _favoriteRepository.getAll();
       _favoriteIds = favoriteRecords.map((f) => f.channelId).toSet();
       
-      debugPrint('Loading favorites: ${favoriteRecords.length} favorite records found');
-      debugPrint('Favorite IDs: $_favoriteIds');
-      
-      // Get all configurations to find channels
-      final configs = await _configRepository.getAll();
-      debugPrint('Found ${configs.length} configurations');
-      final allChannels = <Channel>[];
-      
-      // Load channels ONLY from cache (never from network)
-      for (final config in configs) {
-        try {
-          // Load from cache only
-          final configChannels = await _cacheRepository.loadChannels(config.id);
-          
-          if (configChannels != null && configChannels.isNotEmpty) {
-            debugPrint('Loaded ${configChannels.length} channels from cache for config ${config.id}');
-            allChannels.addAll(configChannels);
-          } else {
-            debugPrint('No cache found for config ${config.id}');
-          }
-        } catch (e) {
-          debugPrint('Failed to load cache for config ${config.id}: $e');
-          continue;
-        }
+      if (_favoriteIds.isEmpty) {
+        _favorites = [];
+        return;
       }
       
-      // Filter channels that are in favorites
-      _favorites = allChannels
-          .where((channel) => _favoriteIds.contains(channel.id))
-          .toList();
+      // Batch load channels from cache by IDs
+      _favorites = await _cacheRepository.getChannelsByIds(_favoriteIds.toList());
       
-      debugPrint('Loaded ${_favorites.length} favorite channels from cache');
+      debugPrint('Loaded ${_favorites.length} favorite channels from database cache');
     } catch (e) {
       _error = 'Failed to load favorites: $e';
       _favorites = [];
@@ -181,7 +157,6 @@ class ChannelViewModel extends ChangeNotifier {
   }
 
   /// Load browse history
-  /// Loads ONLY from SQLite cache, never from network
   Future<void> loadHistory() async {
     _isLoading = true;
     _error = null;
@@ -189,42 +164,25 @@ class ChannelViewModel extends ChangeNotifier {
 
     try {
       final historyRecords = await _historyRepository.getAll();
-      debugPrint('Loading history: ${historyRecords.length} history records found');
-      
-      // Get all configurations to find channels
-      final configs = await _configRepository.getAll();
-      debugPrint('Found ${configs.length} configurations');
-      final allChannels = <Channel>[];
-      
-      // Load channels ONLY from cache (never from network)
-      for (final config in configs) {
-        try {
-          // Load from cache only
-          final configChannels = await _cacheRepository.loadChannels(config.id);
-          
-          if (configChannels != null && configChannels.isNotEmpty) {
-            debugPrint('Loaded ${configChannels.length} channels from cache for config ${config.id}');
-            allChannels.addAll(configChannels);
-          } else {
-            debugPrint('No cache found for config ${config.id}');
-          }
-        } catch (e) {
-          debugPrint('Failed to load cache for config ${config.id}: $e');
-          continue;
-        }
+      if (historyRecords.isEmpty) {
+        _history = [];
+        return;
       }
       
-      // Build a map of channels by ID for quick lookup
-      final channelMap = {for (var channel in allChannels) channel.id: channel};
+      final historyIds = historyRecords.map((r) => r.channelId).toList();
       
-      // Filter and order channels by history (already sorted by repository)
-      _history = historyRecords
-          .map((record) => channelMap[record.channelId])
+      // Batch load channels from cache
+      final unsortedChannels = await _cacheRepository.getChannelsByIds(historyIds);
+      
+      // Re-sort to maintain history order (newest first)
+      final channelMap = {for (var channel in unsortedChannels) channel.id: channel};
+      _history = historyIds
+          .map((id) => channelMap[id])
           .where((channel) => channel != null)
           .cast<Channel>()
           .toList();
       
-      debugPrint('Loaded ${_history.length} history channels from cache');
+      debugPrint('Loaded ${_history.length} history channels from database cache');
     } catch (e) {
       _error = 'Failed to load history: $e';
       _history = [];
@@ -234,6 +192,7 @@ class ChannelViewModel extends ChangeNotifier {
       notifyListeners();
     }
   }
+
 
   /// Check if a channel is favorited (synchronous, uses cached data)
   bool isFavorite(String channelId) {

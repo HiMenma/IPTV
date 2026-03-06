@@ -1,12 +1,24 @@
 import 'dart:io';
 import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart';
 import 'package:uuid/uuid.dart';
 import '../models/channel.dart';
 import '../utils/error_handler.dart';
 
+/// Helper class for isolate parsing
+class _M3UParseParams {
+  final String content;
+  final String configId;
+  _M3UParseParams(this.content, this.configId);
+}
+
 class M3UService {
   final Dio _dio;
   final Uuid _uuid;
+  
+  // Pre-compiled RegEx patterns for performance
+  static final _logoRegExp = RegExp(r'tvg-logo="([^"]*)"', caseSensitive: false);
+  static final _groupRegExp = RegExp(r'group-title="([^"]*)"', caseSensitive: false);
   
   // Cache for parsed M3U data
   final Map<String, List<Channel>> _cache = {};
@@ -20,9 +32,7 @@ class M3UService {
         _uuid = uuid ?? const Uuid();
 
   /// Parse a local M3U/M3U8 file and extract channels
-  /// Requirements: 3.5
   Future<List<Channel>> parseLocalFile(String filePath, String configId, {bool forceRefresh = false}) async {
-    // Check cache first
     final cacheKey = 'local:$filePath:$configId';
     if (!forceRefresh && _isCacheValid(cacheKey)) {
       return _cache[cacheKey]!;
@@ -35,28 +45,19 @@ class M3UService {
       }
       
       final content = await file.readAsString();
-      final channels = parseM3UContent(content, configId);
+      // Use compute to run parsing in a background isolate to avoid UI jank
+      final channels = await compute(_parseM3UIsolate, _M3UParseParams(content, configId));
       
-      // Cache the result
       _updateCache(cacheKey, channels);
-      
       return channels;
-    } on FormatException catch (e) {
-      throw Exception('Invalid M3U file format: ${e.message}');
-    } on FileSystemException catch (e) {
-      throw Exception('Failed to read M3U file: ${e.message}');
     } catch (e) {
-      if (e.toString().contains('Invalid M3U format')) {
-        rethrow;
-      }
-      throw Exception('Failed to parse local M3U file: $e');
+      debugPrint('Error parsing local M3U: $e');
+      rethrow;
     }
   }
 
   /// Fetch and parse a remote M3U/M3U8 file
-  /// Requirements: 3.5
   Future<List<Channel>> parseNetworkFile(String url, String configId, {bool forceRefresh = false}) async {
-    // Check cache first
     final cacheKey = 'network:$url:$configId';
     if (!forceRefresh && _isCacheValid(cacheKey)) {
       return _cache[cacheKey]!;
@@ -67,41 +68,69 @@ class M3UService {
         url,
         options: Options(
           responseType: ResponseType.plain,
-          followRedirects: true,
         ),
-      ).timeout(
-        const Duration(seconds: 30),
-        onTimeout: () {
-          throw DioException(
-            requestOptions: RequestOptions(path: url),
-            type: DioExceptionType.connectionTimeout,
-          );
-        },
       );
       
-      if (response.statusCode != 200) {
-        throw NetworkException(
-          'Failed to fetch M3U file: HTTP ${response.statusCode}',
-          type: NetworkErrorType.serverError,
-        );
-      }
-      
       final content = response.data as String;
-      try {
-        final channels = parseM3UContent(content, configId);
-        
-        // Cache the result
-        _updateCache(cacheKey, channels);
-        
-        return channels;
-      } catch (e) {
-        if (e.toString().contains('Invalid M3U format')) {
-          throw Exception('Invalid M3U file format: ${e.toString()}');
-        }
-        rethrow;
-      }
+      // Use compute to run parsing in a background isolate
+      final channels = await compute(_parseM3UIsolate, _M3UParseParams(content, configId));
+      
+      _updateCache(cacheKey, channels);
+      return channels;
     });
   }
+
+  /// Top-level function for compute()
+  static List<Channel> _parseM3UIsolate(_M3UParseParams params) {
+    const uuid = Uuid();
+    // Namespace for UUID v5 generation (random but constant)
+    const String namespace = '6ba7b810-9dad-11d1-80b4-00c04fd430c8'; 
+    final content = params.content;
+    final configId = params.configId;
+    
+    final lines = content.split('\n');
+    if (lines.isEmpty || !lines[0].trim().startsWith('#EXTM3U')) {
+      throw Exception('Invalid M3U format: Missing #EXTM3U header');
+    }
+    
+    final channels = <Channel>[];
+    String? currentExtinf;
+    
+    for (int i = 1; i < lines.length; i++) {
+      final line = lines[i].trim();
+      if (line.isEmpty) continue;
+      
+      if (line.startsWith('#EXTINF:')) {
+        currentExtinf = line;
+      } else if (!line.startsWith('#') && currentExtinf != null) {
+        final commaIndex = currentExtinf.lastIndexOf(',');
+        if (commaIndex != -1) {
+          final attributesPart = currentExtinf.substring(0, commaIndex);
+          final channelName = currentExtinf.substring(commaIndex + 1).trim();
+          
+          if (channelName.isNotEmpty) {
+            final logoMatch = _logoRegExp.firstMatch(attributesPart);
+            final groupMatch = _groupRegExp.firstMatch(attributesPart);
+            
+            // Use UUID v5 to generate a stable ID based on configId, name, and URL
+            final stableId = uuid.v5(namespace, '$configId:$channelName:$line');
+            
+            channels.add(Channel(
+              id: stableId,
+              name: channelName,
+              streamUrl: line,
+              logoUrl: logoMatch?.group(1),
+              category: groupMatch?.group(1),
+              configId: configId,
+            ));
+          }
+        }
+        currentExtinf = null;
+      }
+    }
+    return channels;
+  }
+
 
   /// Export a list of channels to M3U format
   String exportToM3U(List<Channel> channels) {
@@ -133,90 +162,6 @@ class M3UService {
     }
     
     return buffer.toString();
-  }
-
-  /// Parse M3U content and extract channels
-  /// This method is visible for testing purposes
-  List<Channel> parseM3UContent(String content, String configId) {
-    final lines = content.split('\n').map((line) => line.trim()).toList();
-    
-    // Check for M3U header
-    if (lines.isEmpty || !lines[0].startsWith('#EXTM3U')) {
-      throw Exception('Invalid M3U format: Missing #EXTM3U header');
-    }
-    
-    final channels = <Channel>[];
-    String? currentExtinf;
-    
-    for (int i = 1; i < lines.length; i++) {
-      final line = lines[i];
-      
-      // Skip empty lines
-      if (line.isEmpty) continue;
-      
-      // Parse EXTINF line
-      if (line.startsWith('#EXTINF:')) {
-        currentExtinf = line;
-      }
-      // Parse stream URL (non-comment line after EXTINF)
-      else if (!line.startsWith('#') && currentExtinf != null) {
-        final channel = _parseExtinfLine(currentExtinf, line, configId);
-        if (channel != null) {
-          channels.add(channel);
-        }
-        currentExtinf = null;
-      }
-    }
-    
-    return channels;
-  }
-
-  /// Parse an EXTINF line and create a Channel object
-  Channel? _parseExtinfLine(String extinfLine, String streamUrl, String configId) {
-    try {
-      // Extract metadata from EXTINF line
-      // Format: #EXTINF:duration tvg-name="..." tvg-logo="..." group-title="...",Channel Name
-      
-      // Find the comma that separates attributes from channel name
-      final commaIndex = extinfLine.lastIndexOf(',');
-      if (commaIndex == -1) {
-        return null;
-      }
-      
-      final attributesPart = extinfLine.substring(0, commaIndex);
-      final channelName = extinfLine.substring(commaIndex + 1).trim();
-      
-      if (channelName.isEmpty) {
-        return null;
-      }
-      
-      // Extract attributes
-      String? logoUrl = _extractAttribute(attributesPart, 'tvg-logo');
-      String? category = _extractAttribute(attributesPart, 'group-title');
-      
-      return Channel(
-        id: _uuid.v4(),
-        name: channelName,
-        streamUrl: streamUrl,
-        logoUrl: logoUrl,
-        category: category,
-        configId: configId,
-      );
-    } catch (e) {
-      // Skip malformed entries
-      return null;
-    }
-  }
-
-  /// Extract an attribute value from the EXTINF line
-  String? _extractAttribute(String line, String attributeName) {
-    final pattern = RegExp('$attributeName="([^"]*)"');
-    final match = pattern.firstMatch(line);
-    if (match != null && match.groupCount >= 1) {
-      final value = match.group(1);
-      return (value != null && value.isNotEmpty) ? value : null;
-    }
-    return null;
   }
 
   /// Escape special characters in attribute values

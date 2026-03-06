@@ -79,6 +79,7 @@ class DatabaseHelper {
     await db.execute('CREATE INDEX idx_favorites_added_at ON favorites(added_at)');
     await db.execute('CREATE INDEX idx_history_watched_at ON history(watched_at)');
     await db.execute('CREATE INDEX idx_channel_cache_config ON channel_cache(config_id)');
+    await db.execute('CREATE INDEX idx_channel_cache_id ON channel_cache(channel_id)');
 
     debugPrint('Database tables created successfully');
   }

@@ -141,6 +141,48 @@ class ChannelCacheRepositorySQLite {
     }
   }
 
+  /// Get multiple channels by their IDs across all configurations
+  Future<List<Channel>> getChannelsByIds(List<String> channelIds) async {
+    if (channelIds.isEmpty) return [];
+    
+    try {
+      final db = await _dbHelper.database;
+      
+      // SQLite has a limit on the number of variables in a query
+      // For very large lists, we should split it into chunks
+      const int chunkSize = 500;
+      final results = <Channel>[];
+      
+      for (var i = 0; i < channelIds.length; i += chunkSize) {
+        final chunk = channelIds.sublist(
+          i, 
+          i + chunkSize > channelIds.length ? channelIds.length : i + chunkSize
+        );
+        
+        final String placeholders = List.filled(chunk.length, '?').join(',');
+        final List<Map<String, dynamic>> maps = await db.query(
+          'channel_cache',
+          where: 'channel_id IN ($placeholders)',
+          whereArgs: chunk,
+        );
+        
+        results.addAll(maps.map((map) => Channel(
+          id: map['channel_id'] as String,
+          name: map['name'] as String,
+          streamUrl: map['stream_url'] as String,
+          configId: map['config_id'] as String,
+          logoUrl: map['logo_url'] as String?,
+          category: map['category'] as String?,
+        )));
+      }
+      
+      return results;
+    } catch (e) {
+      print('Error getting channels by IDs: $e');
+      return [];
+    }
+  }
+
   /// Get cache info for debugging
   Future<Map<String, dynamic>> getCacheInfo(String configId) async {
     try {

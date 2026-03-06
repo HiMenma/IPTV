@@ -332,8 +332,12 @@ class XtreamService {
           category = item['category_name']?.toString() ?? item['category']?.toString();
         }
 
+        // Use UUID v5 for stable ID
+        const String namespace = '6ba7b810-9dad-11d1-80b4-00c04fd430c8';
+        final stableId = _uuid.v5(namespace, '$configId:$streamId');
+
         channels.add(Channel(
-          id: _uuid.v4(),
+          id: stableId,
           name: name,
           streamUrl: streamUrl,
           logoUrl: logoUrl?.isNotEmpty == true ? logoUrl : null,
