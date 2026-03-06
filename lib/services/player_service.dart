@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:chewie/chewie.dart';
 import 'package:video_player/video_player.dart';
@@ -78,7 +79,6 @@ class PlayerService {
           await _chewieController!.pause();
           _chewieController!.dispose();
         } catch (e) {
-          // Ignore disposal errors
           debugPrint('Error disposing chewie controller: $e');
         }
         _chewieController = null;
@@ -90,7 +90,6 @@ class PlayerService {
           }
           await _videoController!.dispose();
         } catch (e) {
-          // Ignore disposal errors
           debugPrint('Error disposing video controller: $e');
         }
         _videoController = null;
@@ -99,23 +98,38 @@ class PlayerService {
       // Small delay to ensure resources are fully released
       await Future.delayed(const Duration(milliseconds: 100));
 
-      // Create video player controller with network URL
-      _videoController = VideoPlayerController.networkUrl(Uri.parse(streamUrl));
+      // Create video player controller with network URL and VLC User-Agent
+      _videoController = VideoPlayerController.networkUrl(
+        Uri.parse(streamUrl),
+        httpHeaders: {
+          'User-Agent': 'VLC/3.0.12 LibVLC/3.0.12',
+          'Accept': '*/*',
+        },
+      );
       
       // Set up video player listeners
       _setupVideoPlayerListeners();
       
-      // Initialize the video player
-      await _videoController!.initialize();
+      // Initialize the video player with a timeout
+      await _videoController!.initialize().timeout(
+        const Duration(seconds: 20),
+        onTimeout: () {
+          throw Exception('Connection timeout during initialization');
+        },
+      );
       
       // Create Chewie controller with optimized settings for live streams
       _chewieController = ChewieController(
         videoPlayerController: _videoController!,
         autoPlay: true,
         looping: false,
+        isLive: true, 
         allowFullScreen: true,
         allowMuting: true,
         showControls: true,
+        aspectRatio: (_videoController!.value.aspectRatio > 0) 
+            ? _videoController!.value.aspectRatio 
+            : 16 / 9,
         materialProgressColors: ChewieProgressColors(
           playedColor: Color(0xFF2196F3),
           handleColor: Color(0xFF2196F3),
@@ -163,11 +177,19 @@ class PlayerService {
       // Set volume
       await _videoController!.setVolume(_currentVolume);
       
-      // Enable wakelock during playback (ignore errors in test environment)
+      // macOS/Web: Small delay before starting playback helps the texture bind correctly.
+      if (Platform.isMacOS) {
+        await Future.delayed(const Duration(milliseconds: 500));
+        if (_videoController != null && !_videoController!.value.isPlaying) {
+          await _videoController!.play();
+        }
+      }
+
+      // Enable wakelock during playback
       try {
         await WakelockPlus.enable();
       } catch (e) {
-        // Wakelock may not be available in test environment, ignore
+        debugPrint('Wakelock error: $e');
       }
       
       _updateState(PlayerState.playing);
@@ -175,7 +197,7 @@ class PlayerService {
       _updateState(PlayerState.error);
       final errorMessage = ErrorHandler.getUserFriendlyMessage(e);
       _errorController.add(errorMessage);
-      throw Exception(errorMessage);
+      rethrow;
     }
   }
 
@@ -347,17 +369,18 @@ class PlayerService {
         }
       }
       
-      // Handle completion (only for non-live streams with valid duration)
-      // For live streams, duration is often 0 or very large, so we skip this check
-      if (value.duration.inMilliseconds > 0 && 
-          value.duration.inMilliseconds < 86400000 && // Less than 24 hours (not a live stream)
+      // Improved completion check for IPTV: 
+      // Only stop if it's explicitly NOT a live stream and reached end.
+      // macOS Bug: Live streams often report a fake 1ms duration.
+      bool isSuspiciouslyShort = value.duration.inSeconds < 10;
+      
+      if (!value.isBuffering && 
+          value.duration.inMilliseconds > 0 && 
+          !isSuspiciouslyShort && // Ignore completion for 1ms/fake durations
+          value.duration.inMilliseconds < 14400000 && // VODs < 4 hours
           value.position >= value.duration) {
         _updateState(PlayerState.stopped);
-        try {
-          WakelockPlus.disable();
-        } catch (e) {
-          // Wakelock may not be available in test environment, ignore
-        }
+        WakelockPlus.disable().catchError((_) => null);
       }
     });
   }

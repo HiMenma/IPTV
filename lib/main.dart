@@ -27,6 +27,7 @@ class MyApp extends StatelessWidget {
       child: Consumer<ThemeProvider>(
         builder: (context, themeProvider, child) {
           return MaterialApp(
+            debugShowCheckedModeBanner: false,
             title: 'IPTV Player',
             theme: themeProvider.lightTheme,
             darkTheme: themeProvider.darkTheme,
@@ -49,10 +50,10 @@ class MainNavigationScreen extends StatefulWidget {
 class _MainNavigationScreenState extends State<MainNavigationScreen> {
   int _currentIndex = 0;
 
-  final List<Widget> _screens = const [
-    HomeScreen(),
-    FavoritesScreen(),
-    HistoryScreen(),
+  final List<Widget> _screens = [
+    const HomeScreen(),
+    const FavoritesScreen(),
+    const HistoryScreen(),
   ];
 
   @override
@@ -68,30 +69,18 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
           setState(() {
             _currentIndex = index;
           });
-          
-          // Refresh data when switching to Favorites or History tabs
-          if (index == 1) {
-            // Favorites tab
-            context.read<ChannelViewModel>().loadFavorites();
-          } else if (index == 2) {
-            // History tab
-            context.read<ChannelViewModel>().loadHistory();
-          }
         },
         destinations: const [
           NavigationDestination(
-            icon: Icon(Icons.home_outlined),
-            selectedIcon: Icon(Icons.home),
-            label: 'Home',
+            icon: Icon(Icons.tv),
+            label: 'Channels',
           ),
           NavigationDestination(
-            icon: Icon(Icons.favorite_outline),
-            selectedIcon: Icon(Icons.favorite),
+            icon: Icon(Icons.favorite),
             label: 'Favorites',
           ),
           NavigationDestination(
             icon: Icon(Icons.history),
-            selectedIcon: Icon(Icons.history),
             label: 'History',
           ),
         ],

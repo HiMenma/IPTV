@@ -147,7 +147,6 @@ Temporary Items
 **/Package.resolved
 
 # Web related
-lib/generated_plugin_registrant.dart
 
 # Windows related
 **/windows/flutter/ephemeral/
@@ -217,3 +216,6 @@ firebase_options.dart
 
 # Cache
 .cache/
+
+dist/
+debug/
