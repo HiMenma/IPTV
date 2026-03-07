@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import '../../viewmodels/configuration_viewmodel.dart';
 import '../../models/configuration.dart';
+import '../../viewmodels/configuration_viewmodel.dart';
 import '../widgets/configuration_card.dart';
 import 'configuration_screen.dart';
 import 'channel_list_screen.dart';
@@ -17,10 +17,9 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   void initState() {
     super.initState();
-    // Load configurations when screen initializes
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      context.read<ConfigurationViewModel>().loadConfigurations();
-    });
+    Future.microtask(
+      () => context.read<ConfigurationViewModel>().loadConfigurations(),
+    );
   }
 
   @override
@@ -28,7 +27,13 @@ class _HomeScreenState extends State<HomeScreen> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('IPTV Player'),
-        backgroundColor: Theme.of(context).colorScheme.inversePrimary,
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.add),
+            tooltip: 'Add Configuration',
+            onPressed: () => _navigateToAddConfiguration(context),
+          ),
+        ],
       ),
       body: Consumer<ConfigurationViewModel>(
         builder: (context, viewModel, child) {
@@ -95,11 +100,6 @@ class _HomeScreenState extends State<HomeScreen> {
           );
         },
       ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => _navigateToAddConfiguration(context),
-        icon: const Icon(Icons.add),
-        label: const Text('Add Configuration'),
-      ),
     );
   }
 
@@ -145,54 +145,26 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
           TextButton(
             onPressed: () => Navigator.pop(context, true),
-            style: TextButton.styleFrom(foregroundColor: Theme.of(context).colorScheme.error),
+            style: TextButton.styleFrom(
+                foregroundColor: Theme.of(context).colorScheme.error),
             child: const Text('Delete'),
           ),
         ],
       ),
     );
 
-    if (confirmed == true && context.mounted) {
-      try {
-        await context.read<ConfigurationViewModel>().deleteConfiguration(config.id);
-        if (context.mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Deleted "${config.name}"')),
-          );
-        }
-      } catch (e) {
-        if (context.mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('Failed to delete: $e'),
-              backgroundColor: Theme.of(context).colorScheme.error,
-            ),
-          );
-        }
-      }
+    if (confirmed == true && mounted) {
+      context.read<ConfigurationViewModel>().deleteConfiguration(config.id);
     }
   }
 
   Future<void> _refreshConfiguration(
       BuildContext context, Configuration config) async {
-    try {
-      await context.read<ConfigurationViewModel>().refreshConfiguration(config.id);
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Refreshed "${config.name}"')),
-        );
-      }
-    } catch (e) {
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Failed to refresh: $e'),
-            backgroundColor: Theme.of(context).colorScheme.error,
-          ),
-        );
-      }
+    await context.read<ConfigurationViewModel>().refreshConfiguration(config.id);
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Refreshed ${config.name}')),
+      );
     }
   }
 }
-
-

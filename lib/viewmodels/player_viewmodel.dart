@@ -52,15 +52,11 @@ class PlayerViewModel extends ChangeNotifier {
       _error = null;
       notifyListeners();
 
-      // Initialize player if not already initialized
       if (_playerService.currentState == PlayerState.idle) {
         await _playerService.initialize();
       }
 
-      // Play the channel
       await _playerService.play(channel.streamUrl);
-
-      // Record in history
       await _historyRepository.add(channel.id);
     } catch (e) {
       _error = 'Failed to play channel: $e';
@@ -70,7 +66,6 @@ class PlayerViewModel extends ChangeNotifier {
     }
   }
 
-  /// Pause playback
   Future<void> pause() async {
     try {
       await _playerService.pause();
@@ -81,7 +76,6 @@ class PlayerViewModel extends ChangeNotifier {
     }
   }
 
-  /// Resume playback
   Future<void> resume() async {
     try {
       await _playerService.resume();
@@ -92,7 +86,6 @@ class PlayerViewModel extends ChangeNotifier {
     }
   }
 
-  /// Stop playback
   Future<void> stop() async {
     try {
       await _playerService.stop();
@@ -105,7 +98,6 @@ class PlayerViewModel extends ChangeNotifier {
     }
   }
 
-  /// Set volume (0.0 to 1.0)
   Future<void> setVolume(double volume) async {
     try {
       await _playerService.setVolume(volume);
@@ -116,7 +108,6 @@ class PlayerViewModel extends ChangeNotifier {
     }
   }
 
-  /// Toggle fullscreen mode
   void toggleFullscreen() {
     _isFullscreen = !_isFullscreen;
     notifyListeners();

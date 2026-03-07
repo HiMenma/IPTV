@@ -1,10 +1,11 @@
 import 'dart:async';
 import 'dart:io';
 import 'package:flutter/material.dart';
-import 'package:chewie/chewie.dart';
 import 'package:video_player/video_player.dart';
+import 'package:chewie/chewie.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 import '../utils/error_handler.dart';
+import '../utils/app_logger.dart';
 
 /// Player state enumeration
 enum PlayerState {
@@ -17,88 +18,42 @@ enum PlayerState {
   error,
 }
 
-/// Service wrapper for Chewie video player
-/// Provides a simplified interface for video playback operations
 class PlayerService {
   VideoPlayerController? _videoController;
   ChewieController? _chewieController;
-  final StreamController<PlayerState> _stateController = StreamController<PlayerState>.broadcast();
-  final StreamController<String?> _errorController = StreamController<String?>.broadcast();
-  
   PlayerState _currentState = PlayerState.idle;
   double _currentVolume = 1.0;
 
-  /// Stream of player state changes
+  final _stateController = StreamController<PlayerState>.broadcast();
+  final _errorController = StreamController<String?>.broadcast();
+
   Stream<PlayerState> get stateStream => _stateController.stream;
-
-  /// Stream of player errors
   Stream<String?> get errorStream => _errorController.stream;
-
-  /// Get current player state
   PlayerState get currentState => _currentState;
-  
-  /// Get the Chewie controller for UI integration
   ChewieController? get chewieController => _chewieController;
-  
-  /// Get the video player controller
-  VideoPlayerController? get videoController => _videoController;
 
-  /// Initialize the player
+  /// Initialize the player service
   Future<void> initialize() async {
-    try {
-      if (_videoController != null || _chewieController != null) {
-        await dispose();
-      }
-
-      _updateState(PlayerState.idle);
-    } catch (e) {
-      _updateState(PlayerState.error);
-      _errorController.add('Failed to initialize player: $e');
-      rethrow;
-    }
+    _updateState(PlayerState.idle);
   }
 
   /// Play a stream from the given URL
-  /// Requirements: 5.3
   Future<void> play(String streamUrl) async {
     try {
-      // Validate stream URL first
+      AppLogger.log('Player: Attempting to play URL: $streamUrl');
       if (streamUrl.isEmpty) {
         throw Exception('Invalid stream URL: URL cannot be empty');
       }
 
-      if (!streamUrl.startsWith('http://') && !streamUrl.startsWith('https://')) {
-        throw Exception('Invalid stream URL: Must start with http:// or https://');
-      }
-
       _updateState(PlayerState.preparing);
 
-      // Dispose of existing controllers if any
-      if (_chewieController != null) {
-        try {
-          await _chewieController!.pause();
-          _chewieController!.dispose();
-        } catch (e) {
-          debugPrint('Error disposing chewie controller: $e');
-        }
-        _chewieController = null;
-      }
-      if (_videoController != null) {
-        try {
-          if (_videoController!.value.isPlaying) {
-            await _videoController!.pause();
-          }
-          await _videoController!.dispose();
-        } catch (e) {
-          debugPrint('Error disposing video controller: $e');
-        }
-        _videoController = null;
-      }
+      // Dispose existing controllers
+      await _disposeControllers();
 
-      // Small delay to ensure resources are fully released
+      // Small delay to ensure resources are released
       await Future.delayed(const Duration(milliseconds: 100));
 
-      // Create video player controller with network URL and VLC User-Agent
+      // Create video player controller with VLC User-Agent for compatibility
       _videoController = VideoPlayerController.networkUrl(
         Uri.parse(streamUrl),
         httpHeaders: {
@@ -107,18 +62,20 @@ class PlayerService {
         },
       );
       
-      // Set up video player listeners
       _setupVideoPlayerListeners();
       
-      // Initialize the video player with a timeout
+      // Initialize with 20s timeout
       await _videoController!.initialize().timeout(
         const Duration(seconds: 20),
         onTimeout: () {
+          AppLogger.log('Player Error: Initialization Timeout');
           throw Exception('Connection timeout during initialization');
         },
       );
       
-      // Create Chewie controller with optimized settings for live streams
+      AppLogger.log('Player: Initialization complete. Size: ${_videoController!.value.size}');
+      
+      // Create Chewie controller
       _chewieController = ChewieController(
         videoPlayerController: _videoController!,
         autoPlay: true,
@@ -131,53 +88,17 @@ class PlayerService {
             ? _videoController!.value.aspectRatio 
             : 16 / 9,
         materialProgressColors: ChewieProgressColors(
-          playedColor: Color(0xFF2196F3),
-          handleColor: Color(0xFF2196F3),
-          backgroundColor: Color(0x33FFFFFF),
-          bufferedColor: Color(0x66FFFFFF),
-        ),
-        placeholder: Container(
-          color: Color(0xFF000000),
-          child: Center(
-            child: CircularProgressIndicator(
-              color: Color(0xFF2196F3),
-            ),
-          ),
+          playedColor: const Color(0xFF2196F3),
+          handleColor: const Color(0xFF2196F3),
+          backgroundColor: const Color(0x33FFFFFF),
+          bufferedColor: const Color(0x66FFFFFF),
         ),
         autoInitialize: true,
-        errorBuilder: (context, errorMessage) {
-          return Container(
-            color: Color(0xFF000000),
-            child: Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(Icons.error_outline, color: Color(0xFFFF5252), size: 48),
-                  SizedBox(height: 16),
-                  Text(
-                    'Video Error',
-                    style: TextStyle(color: Colors.white, fontSize: 18),
-                  ),
-                  SizedBox(height: 8),
-                  Padding(
-                    padding: EdgeInsets.symmetric(horizontal: 32),
-                    child: Text(
-                      errorMessage,
-                      style: TextStyle(color: Colors.white70, fontSize: 14),
-                      textAlign: TextAlign.center,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          );
-        },
       );
       
-      // Set volume
       await _videoController!.setVolume(_currentVolume);
       
-      // macOS/Web: Small delay before starting playback helps the texture bind correctly.
+      // macOS/Web specific fix: delay to ensure texture binding
       if (Platform.isMacOS) {
         await Future.delayed(const Duration(milliseconds: 500));
         if (_videoController != null && !_videoController!.value.isPlaying) {
@@ -185,7 +106,6 @@ class PlayerService {
         }
       }
 
-      // Enable wakelock during playback
       try {
         await WakelockPlus.enable();
       } catch (e) {
@@ -194,6 +114,7 @@ class PlayerService {
       
       _updateState(PlayerState.playing);
     } catch (e) {
+      AppLogger.log('Player Error in play(): $e');
       _updateState(PlayerState.error);
       final errorMessage = ErrorHandler.getUserFriendlyMessage(e);
       _errorController.add(errorMessage);
@@ -201,199 +122,97 @@ class PlayerService {
     }
   }
 
-  /// Pause playback
-  Future<void> pause() async {
-    try {
-      if (_videoController == null) {
-        throw Exception('Player not initialized');
-      }
-
-      if (_currentState != PlayerState.playing) {
-        return;
-      }
-
-      await _videoController!.pause();
-      _updateState(PlayerState.paused);
-    } catch (e) {
-      _updateState(PlayerState.error);
-      _errorController.add('Failed to pause playback: $e');
-      rethrow;
-    }
-  }
-
-  /// Resume playback
-  Future<void> resume() async {
-    try {
-      if (_videoController == null) {
-        throw Exception('Player not initialized');
-      }
-
-      if (_currentState != PlayerState.paused) {
-        return;
-      }
-
-      await _videoController!.play();
-      _updateState(PlayerState.playing);
-    } catch (e) {
-      _updateState(PlayerState.error);
-      _errorController.add('Failed to resume playback: $e');
-      rethrow;
-    }
-  }
-
-  /// Stop playback
-  Future<void> stop() async {
-    try {
-      if (_videoController == null) {
-        return;
-      }
-
-      await _videoController!.pause();
-      await _videoController!.seekTo(Duration.zero);
-      
-      // Disable wakelock when stopping (ignore errors in test environment)
-      try {
-        await WakelockPlus.disable();
-      } catch (e) {
-        // Wakelock may not be available in test environment, ignore
-      }
-      
-      _updateState(PlayerState.stopped);
-    } catch (e) {
-      _updateState(PlayerState.error);
-      _errorController.add('Failed to stop playback: $e');
-      rethrow;
-    }
-  }
-
-  /// Set playback volume (0.0 to 1.0)
-  Future<void> setVolume(double volume) async {
-    try {
-      if (volume < 0.0 || volume > 1.0) {
-        throw ArgumentError('Volume must be between 0.0 and 1.0');
-      }
-
-      _currentVolume = volume;
-
-      if (_videoController != null) {
-        await _videoController!.setVolume(volume);
-      }
-    } catch (e) {
-      _errorController.add('Failed to set volume: $e');
-      rethrow;
-    }
-  }
-
-  /// Dispose of player resources
-  Future<void> dispose() async {
-    try {
-      // Stop playback first
-      if (_videoController != null && _videoController!.value.isPlaying) {
-        await _videoController!.pause();
-      }
-      
-      // Disable wakelock (ignore errors in test environment)
-      try {
-        await WakelockPlus.disable();
-      } catch (e) {
-        // Wakelock may not be available in test environment, ignore
-      }
-      
-      // Dispose Chewie controller first
-      if (_chewieController != null) {
-        _chewieController!.dispose();
-        _chewieController = null;
-      }
-      
-      // Then dispose video controller
-      if (_videoController != null) {
-        await _videoController!.dispose();
-        _videoController = null;
-      }
-
-      _updateState(PlayerState.idle);
-    } catch (e) {
-      _errorController.add('Error during disposal: $e');
-    }
-  }
-
-  /// Set up video player event listeners
   void _setupVideoPlayerListeners() {
     if (_videoController == null) return;
 
-    // Listen to player state changes
     _videoController!.addListener(() {
       if (_videoController == null) return;
-      
       final value = _videoController!.value;
       
-      // Handle errors
-      // Requirements: 5.3
       if (value.hasError) {
+        AppLogger.log('Player Error Callback: ${value.errorDescription}');
         _updateState(PlayerState.error);
-        
-        // Provide user-friendly error messages
-        String userFriendlyMessage;
-        final errorDescription = value.errorDescription?.toLowerCase() ?? '';
-        
-        if (errorDescription.contains('404') || errorDescription.contains('not found')) {
-          userFriendlyMessage = 'Stream not found. The channel may be offline or the URL is incorrect.';
-        } else if (errorDescription.contains('timeout')) {
-          userFriendlyMessage = 'Connection timeout. Please check your internet connection and try again.';
-        } else if (errorDescription.contains('network') || errorDescription.contains('connection')) {
-          userFriendlyMessage = 'Network error. Please check your internet connection.';
-        } else if (errorDescription.contains('format') || errorDescription.contains('codec')) {
-          userFriendlyMessage = 'Unsupported video format. This stream cannot be played.';
-        } else {
-          userFriendlyMessage = 'Playback error: ${value.errorDescription ?? "Unknown error"}';
-        }
-        
-        _errorController.add(userFriendlyMessage);
+        _errorController.add(value.errorDescription);
         return;
       }
       
-      // Handle state changes
+      // Handle state transitions
       if (value.isInitialized) {
-        if (_currentState == PlayerState.preparing) {
-          _updateState(PlayerState.prepared);
-        }
-        
-        if (value.isPlaying) {
-          if (_currentState != PlayerState.playing) {
-            _updateState(PlayerState.playing);
-          }
-        } else if (_currentState == PlayerState.playing && !value.isBuffering) {
-          // Only update to paused if we were playing and not buffering
-          // This prevents false "stopped" states during buffering
-          _updateState(PlayerState.paused);
+        if (value.isPlaying && _currentState != PlayerState.playing) {
+          _updateState(PlayerState.playing);
         }
       }
       
-      // Improved completion check for IPTV: 
-      // Only stop if it's explicitly NOT a live stream and reached end.
-      // macOS Bug: Live streams often report a fake 1ms duration.
+      // Improved completion check for IPTV: 1ms Bug Fix
+      // Ignore completion for suspiciously short durations (< 10s)
       bool isSuspiciouslyShort = value.duration.inSeconds < 10;
       
       if (!value.isBuffering && 
           value.duration.inMilliseconds > 0 && 
-          !isSuspiciouslyShort && // Ignore completion for 1ms/fake durations
-          value.duration.inMilliseconds < 14400000 && // VODs < 4 hours
+          !isSuspiciouslyShort && 
+          value.duration.inMilliseconds < 14400000 && 
           value.position >= value.duration) {
+        AppLogger.log('Player: VOD reached end.');
         _updateState(PlayerState.stopped);
         WakelockPlus.disable().catchError((_) => null);
       }
     });
   }
 
-  /// Update player state and notify listeners
+  Future<void> _disposeControllers() async {
+    if (_chewieController != null) {
+      _chewieController!.dispose();
+      _chewieController = null;
+    }
+    if (_videoController != null) {
+      await _videoController!.dispose();
+      _videoController = null;
+    }
+  }
+
+  Future<void> pause() async {
+    try {
+      if (_videoController != null && _videoController!.value.isInitialized) {
+        await _videoController!.pause();
+        _updateState(PlayerState.paused);
+      }
+    } catch (e) {}
+  }
+
+  Future<void> resume() async {
+    try {
+      if (_videoController != null && _videoController!.value.isInitialized) {
+        await _videoController!.play();
+        _updateState(PlayerState.playing);
+      }
+    } catch (e) {}
+  }
+
+  Future<void> stop() async {
+    try {
+      if (_videoController != null) {
+        await _videoController!.pause();
+        _updateState(PlayerState.stopped);
+        WakelockPlus.disable().catchError((_) => null);
+      }
+    } catch (e) {}
+  }
+
+  Future<void> setVolume(double volume) async {
+    _currentVolume = volume;
+    if (_videoController != null && _videoController!.value.isInitialized) {
+      await _videoController!.setVolume(volume);
+    }
+  }
+
+  void dispose() {
+    _disposeControllers();
+    _stateController.close();
+    _errorController.close();
+  }
+
   void _updateState(PlayerState newState) {
     _currentState = newState;
     _stateController.add(newState);
-  }
-
-  /// Clean up stream controllers
-  Future<void> closeStreams() async {
-    await _stateController.close();
-    await _errorController.close();
   }
 }

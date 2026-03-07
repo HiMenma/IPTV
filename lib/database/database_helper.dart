@@ -1,7 +1,11 @@
 import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart';
-import 'dart:io';
+import 'dart:io' show File, Platform;
 import 'package:flutter/foundation.dart';
+import 'package:sqflite_common_ffi/sqflite_ffi.dart';
+
+// Conditional imports to prevent macOS build from failing on Web-only packages
+import 'db_stub.dart' if (dart.library.html) 'db_web.dart' as platform_db;
 
 /// Database helper for managing SQLite database
 class DatabaseHelper {
@@ -10,6 +14,18 @@ class DatabaseHelper {
 
   DatabaseHelper._init();
 
+  /// Initialize the database factory for the current platform.
+  static void initPlatformFactory() {
+    if (kIsWeb) {
+      platform_db.initWebFactory();
+      debugPrint('Database: Global factory set to FfiWeb');
+    } else if (Platform.isWindows || Platform.isLinux) {
+      sqfliteFfiInit();
+      databaseFactory = databaseFactoryFfi;
+      debugPrint('Database: Global factory set to Ffi (Desktop)');
+    }
+  }
+
   Future<Database> get database async {
     if (_database != null) return _database!;
     _database = await _initDB('iptv_player.db');
@@ -17,10 +33,19 @@ class DatabaseHelper {
   }
 
   Future<Database> _initDB(String filePath) async {
-    final dbPath = await getDatabasesPath();
-    final path = join(dbPath, filePath);
-
-    debugPrint('Database path: $path');
+    String path;
+    
+    if (kIsWeb) {
+      platform_db.initWebFactory();
+      path = filePath;
+    } else {
+      if (Platform.isWindows || Platform.isLinux) {
+        databaseFactory = databaseFactoryFfi;
+        sqfliteFfiInit();
+      }
+      final dbPath = await getDatabasesPath();
+      path = join(dbPath, filePath);
+    }
 
     return await openDatabase(
       path,
@@ -31,9 +56,6 @@ class DatabaseHelper {
   }
 
   Future<void> _createDB(Database db, int version) async {
-    debugPrint('Creating database tables...');
-
-    // Configurations table
     await db.execute('''
       CREATE TABLE configurations (
         id TEXT PRIMARY KEY,
@@ -45,7 +67,6 @@ class DatabaseHelper {
       )
     ''');
 
-    // Favorites table
     await db.execute('''
       CREATE TABLE favorites (
         channel_id TEXT PRIMARY KEY,
@@ -53,7 +74,6 @@ class DatabaseHelper {
       )
     ''');
 
-    // History table
     await db.execute('''
       CREATE TABLE history (
         channel_id TEXT PRIMARY KEY,
@@ -61,7 +81,6 @@ class DatabaseHelper {
       )
     ''');
 
-    // Channel cache table
     await db.execute('''
       CREATE TABLE channel_cache (
         config_id TEXT NOT NULL,
@@ -75,63 +94,45 @@ class DatabaseHelper {
       )
     ''');
 
-    // Create indexes for better performance
     await db.execute('CREATE INDEX idx_favorites_added_at ON favorites(added_at)');
     await db.execute('CREATE INDEX idx_history_watched_at ON history(watched_at)');
     await db.execute('CREATE INDEX idx_channel_cache_config ON channel_cache(config_id)');
     await db.execute('CREATE INDEX idx_channel_cache_id ON channel_cache(channel_id)');
-
-    debugPrint('Database tables created successfully');
   }
 
-  Future<void> _upgradeDB(Database db, int oldVersion, int newVersion) async {
-    debugPrint('Upgrading database from version $oldVersion to $newVersion');
-    
-    // Handle future database migrations here
-    if (oldVersion < 2) {
-      // Example: Add new column
-      // await db.execute('ALTER TABLE configurations ADD COLUMN new_field TEXT');
-    }
-  }
+  Future<void> _upgradeDB(Database db, int oldVersion, int newVersion) async {}
 
-  /// Close the database
   Future<void> close() async {
     final db = await database;
     await db.close();
     _database = null;
-    debugPrint('Database closed');
   }
 
-  /// Delete the database (for testing or reset)
   Future<void> deleteDatabase() async {
-    final dbPath = await getDatabasesPath();
-    final path = join(dbPath, 'iptv_player.db');
-    
-    if (await File(path).exists()) {
-      await File(path).delete();
-      debugPrint('Database deleted');
+    if (kIsWeb) {
+      await databaseFactory.deleteDatabase('iptv_player.db');
+    } else {
+      final dbPath = await getDatabasesPath();
+      final path = join(dbPath, 'iptv_player.db');
+      if (await File(path).exists()) {
+        await File(path).delete();
+      }
     }
-    
     _database = null;
   }
 
-  /// Get database size
   Future<int> getDatabaseSize() async {
+    if (kIsWeb) return 0;
     final dbPath = await getDatabasesPath();
     final path = join(dbPath, 'iptv_player.db');
-    
     if (await File(path).exists()) {
-      final file = File(path);
-      return await file.length();
+      return await File(path).length();
     }
-    
     return 0;
   }
 
-  /// Vacuum database to reclaim space
   Future<void> vacuum() async {
     final db = await database;
     await db.execute('VACUUM');
-    debugPrint('Database vacuumed');
   }
 }

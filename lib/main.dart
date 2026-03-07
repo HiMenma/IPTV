@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'database/database_helper.dart';
 import 'providers/theme_provider.dart';
 import 'viewmodels/configuration_viewmodel.dart';
 import 'viewmodels/channel_viewmodel.dart';
@@ -7,8 +8,17 @@ import 'viewmodels/player_viewmodel.dart';
 import 'views/screens/home_screen.dart';
 import 'views/screens/favorites_screen.dart';
 import 'views/screens/history_screen.dart';
+import 'utils/app_logger.dart';
 
-void main() {
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  
+  // Initialize logger
+  await AppLogger.init();
+  
+  // Initialize database factory for Web/Desktop platforms
+  DatabaseHelper.initPlatformFactory();
+  
   runApp(const MyApp());
 }
 

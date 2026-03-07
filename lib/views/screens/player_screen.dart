@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:chewie/chewie.dart';
 import '../../viewmodels/player_viewmodel.dart';
@@ -31,8 +30,6 @@ class _PlayerScreenState extends State<PlayerScreen> {
 
   @override
   void dispose() {
-    // Stop playback when leaving the screen
-    // Use the cached reference to avoid context issues
     try {
       _playerViewModel?.stop();
     } catch (e) {
@@ -70,10 +67,13 @@ class _PlayerScreenState extends State<PlayerScreen> {
       color: Colors.black,
       child: Stack(
         children: [
-          // Chewie player widget
+          // Player widget
           Center(
             child: _buildPlayerWidget(viewModel),
           ),
+          // Loading Indicator
+          if (viewModel.state == PlayerState.preparing || viewModel.state == PlayerState.idle)
+            const Center(child: CircularProgressIndicator(color: Colors.white)),
           // Error overlay
           if (viewModel.error != null) _buildErrorOverlay(viewModel),
         ],
@@ -82,84 +82,17 @@ class _PlayerScreenState extends State<PlayerScreen> {
   }
 
   Widget _buildPlayerWidget(PlayerViewModel viewModel) {
-    switch (viewModel.state) {
-      case PlayerState.idle:
-        return const Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(Icons.tv, size: 64, color: Colors.white54),
-            SizedBox(height: 16),
-            Text(
-              'Initializing player...',
-              style: TextStyle(color: Colors.white54),
-            ),
-          ],
-        );
-      case PlayerState.preparing:
-      case PlayerState.prepared:
-        return const Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            CircularProgressIndicator(color: Colors.white),
-            SizedBox(height: 16),
-            Text(
-              'Loading stream...',
-              style: TextStyle(color: Colors.white54),
-            ),
-          ],
-        );
-      case PlayerState.playing:
-      case PlayerState.paused:
-        // Use Chewie widget for playback
-        final chewieController = viewModel.chewieController;
-        if (chewieController != null && chewieController.videoPlayerController.value.isInitialized) {
-          return AspectRatio(
-            aspectRatio: chewieController.videoPlayerController.value.aspectRatio,
-            child: Chewie(controller: chewieController),
-          );
-        } else {
-          return const Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              CircularProgressIndicator(color: Colors.white),
-              SizedBox(height: 16),
-              Text(
-                'Loading stream...',
-                style: TextStyle(color: Colors.white54),
-              ),
-            ],
-          );
-        }
-      case PlayerState.stopped:
-        return const Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(Icons.stop_circle, size: 64, color: Colors.white54),
-            SizedBox(height: 16),
-            Text(
-              'Playback stopped',
-              style: TextStyle(color: Colors.white54),
-            ),
-          ],
-        );
-      case PlayerState.error:
-        return Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(Icons.error_outline, size: 64, color: Theme.of(context).colorScheme.error),
-            const SizedBox(height: 16),
-            Text(
-              'Playback error',
-              style: TextStyle(color: Theme.of(context).colorScheme.error),
-            ),
-          ],
-        );
+    if (viewModel.chewieController != null && 
+        (viewModel.state == PlayerState.playing || viewModel.state == PlayerState.paused)) {
+      return Chewie(controller: viewModel.chewieController!);
     }
+    
+    return const SizedBox.shrink();
   }
 
   Widget _buildErrorOverlay(PlayerViewModel viewModel) {
     return Container(
-      color: Colors.black.withValues(alpha: 0.8),
+      color: Colors.black.withOpacity(0.8),
       child: Center(
         child: Padding(
           padding: const EdgeInsets.all(24.0),
@@ -170,11 +103,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
               const SizedBox(height: 16),
               const Text(
                 'Playback Error',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 20,
-                  fontWeight: FontWeight.bold,
-                ),
+                style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold),
               ),
               const SizedBox(height: 8),
               Text(
@@ -217,7 +146,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
         color: Theme.of(context).colorScheme.surface,
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.1),
+            color: Colors.black.withOpacity(0.1),
             blurRadius: 4,
             offset: const Offset(0, -2),
           ),
@@ -233,8 +162,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
                 width: 60,
                 height: 60,
                 fit: BoxFit.contain,
-                errorBuilder: (context, error, stackTrace) =>
-                    const Icon(Icons.tv, size: 60),
+                errorBuilder: (context, error, stackTrace) => const Icon(Icons.tv, size: 60),
               ),
             ),
           Expanded(
@@ -243,10 +171,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
               children: [
                 Text(
                   widget.channel.name,
-                  style: const TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                  ),
+                  style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                 ),
