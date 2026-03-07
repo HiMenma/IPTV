@@ -4,7 +4,34 @@
 
 ---
 
-## 1. 整体设计模式
+## 1. 目录结构地图 (Project Map)
+
+```text
+.
+├── android/                # Android 原生配置与权限声明
+├── macos/                  # macOS 原生工程与渲染设置
+├── lib/                    # 核心业务代码 (Dart)
+│   ├── database/           # SQLite 底层封装与自愈逻辑
+│   ├── models/             # 频道与配置的数据实体
+│   ├── providers/          # 全局状态管理 (主题等)
+│   ├── repositories/       # 数据持久化层 (CRUD)
+│   ├── services/           # 核心功能逻辑 (播放控制、流解析)
+│   ├── utils/              # 通用工具类 (日志、错误处理)
+│   ├── viewmodels/         # 业务状态机 (驱动 UI 更新)
+│   └── views/              # UI 视图层
+│       ├── screens/        # 全屏页面
+│       └── widgets/        # 可复用 UI 组件
+├── test/                   # 单元测试与集成测试
+├── ARCHITECTURE.md         # [当前文档]
+├── DEV_NOTES.md            # 开发笔记与故障排除记录
+├── BUILD_GUIDE.md          # 构建与打包指南
+├── build_all.sh            # 自动化构建脚本
+└── pubspec.yaml            # 项目依赖管理
+```
+
+---
+
+## 2. 整体设计模式
 项目采用 **MVVM (Model-View-ViewModel)** 架构，结合 **Service/Repository** 模式，确保 UI、业务逻辑与数据存储解耦。
 
 *   **View**: Flutter Widgets，仅负责 UI 渲染。
@@ -14,54 +41,31 @@
 
 ---
 
-## 2. 目录结构与关键文件索引
+## 3. 核心文件索引
 
-### 📁 `lib/models/` (数据实体)
-*   **`channel.dart`**: 定义单个直播频道的数据结构（名称、URL、Logo、分类等）。
-*   **`configuration.dart`**: 定义播放源配置（M3U 订阅、Xtream 账号、本地文件）。
-
-### 📁 `lib/services/` (核心功能引擎)
+### 📁 `lib/services/` (功能引擎)
 *   **`player_service.dart`**: **[关键]** 播放器底层封装。直接操作 `video_player` 和 `chewie`，管理硬件锁 (Wakelock) 和渲染 Texture 生命周期。
-*   **`xtream_service.dart`**: 处理 Xtream Codes API 逻辑（登录、同步频道列表）。
 *   **`m3u_service.dart`**: 高性能 M3U 文件解析引擎，包含对海量频道的正则表达式优化。
 
-### 📁 `lib/repositories/` (持久化层)
-*   **`configuration_repository.dart`**: 负责配置信息的增删改查及排序持久化。
-*   **`history_repository_sqlite.dart`**: 处理播放历史的 SQLite 存取。
-*   **`channel_cache_repository_sqlite.dart`**: 将海量频道列表缓存到本地数据库，避免每次打开都重新解析。
+### 📁 `lib/viewmodels/` (大脑)
+*   **`player_viewmodel.dart`**: 控制播放状态机。处理自动重试（Watchdog）、错误捕获及 UI 状态分发。
 
-### 📁 `lib/viewmodels/` (业务逻辑/状态管理)
-*   **`player_viewmodel.dart`**: **[大脑]** 控制播放状态机。处理自动重试（Watchdog）、错误捕获及 UI 状态分发。
-*   **`configuration_viewmodel.dart`**: 管理主界面的配置列表状态（如拖拽排序的物理落地）。
-
-### 📁 `lib/database/` (存储底层)
-*   **`database_helper.dart`**: **[骨架]** SQLite 数据库管理。包含版本升级 (Migration) 和**自愈逻辑 (Self-healing)**，确保表结构与代码一致。
-
-### 📁 `lib/views/` (UI 界面)
-*   **`screens/player_screen.dart`**: **[核心视图]** 沉浸式播放页面。实现了逃生导航路径、自动隐藏工具栏及报错覆盖层。
-*   **`widgets/channel_grid_item.dart`**: 高颜值网格布局组件，集成了 `shimmer` 加载动画。
+### 📁 `lib/database/` (骨架)
+*   **`database_helper.dart`**: SQLite 数据库管理。包含版本升级 (Migration) 和**自愈逻辑 (Self-healing)**。
 
 ---
 
-## 3. 核心业务流程
+## 4. 核心业务流程
 
 ### 播放自愈流程 (Playback Watchdog)
 1.  `PlayerService` 监听流状态 -> 发现停顿 (Stall) 超过 15 秒。
 2.  抛出 `Playback stalled` 错误。
-3.  `PlayerViewModel` 捕获异常 -> 开始自动重试计数。
-4.  UI 显示“自动连接中...”提示层。
-5.  `PlayerViewModel` 调用 `PlayerService.play()` 重新拉流。
+3.  `PlayerViewModel` 捕获异常 -> UI 显示“自动连接中...”提示。
+4.  自动执行 `PlayerService.play()` 重新拉流。
 
 ### 数据库自愈流程 (DB Self-healing)
-1.  App 启动，调用 `DatabaseHelper.ensureSchemaConsistency()`。
-2.  执行 `PRAGMA table_info` 扫描现有表结构。
-3.  如果发现用户是通过旧版本升级安装，且表里缺少新增字段（如 `order_index`）。
-4.  动态执行 `ALTER TABLE` 补齐字段，防止业务层 SQL 报错。
-
----
-
-## 4. 关键构建脚本
-*   **`build_all.sh`**: 统一构建入口。支持一键打包 Android APK 和 macOS App，并自动进行产物归档。
+1.  App 启动，执行 `PRAGMA table_info` 扫描表结构。
+2.  如果发现缺少新增字段（如 `order_index`），动态执行 `ALTER TABLE` 补齐。
 
 ---
 **Last Updated**: 2026-03-07
