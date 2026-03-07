@@ -1,86 +1,38 @@
+import 'dart:io';
 import 'package:sqflite/sqflite.dart';
+import 'package:path/provider.dart';
 import 'package:path/path.dart';
-import 'dart:io' show File, Platform;
-import 'package:flutter/foundation.dart';
-import 'package:sqflite_common_ffi/sqflite_ffi.dart';
+import '../utils/app_logger.dart';
 
-// Conditional imports to prevent macOS build from failing on Web-only packages
-import 'db_stub.dart' if (dart.library.html) 'db_web.dart' as platform_db;
-
-/// Database helper for managing SQLite database
 class DatabaseHelper {
-  static final DatabaseHelper instance = DatabaseHelper._init();
+  static final DatabaseHelper _instance = DatabaseHelper._internal();
   static Database? _database;
 
-  DatabaseHelper._init();
+  factory DatabaseHelper() => _instance;
 
-  static void initPlatformFactory() {
-    if (kIsWeb) {
-      platform_db.initWebFactory();
-    } else if (Platform.isWindows || Platform.isLinux) {
-      sqfliteFfiInit();
-      databaseFactory = databaseFactoryFfi;
-    }
-  }
+  DatabaseHelper._internal();
 
   Future<Database> get database async {
     if (_database != null) return _database!;
-    _database = await _initDB('iptv_player.db');
-    // Run self-healing check after opening
-    await _ensureSchemaConsistency(_database!);
+    _database = await _initDatabase();
     return _database!;
   }
 
-  Future<Database> _initDB(String filePath) async {
-    String path;
-    if (kIsWeb) {
-      platform_db.initWebFactory();
-      path = filePath;
-    } else {
-      if (Platform.isWindows || Platform.isLinux) {
-        databaseFactory = databaseFactoryFfi;
-        sqfliteFfiInit();
-      }
-      final dbPath = await getDatabasesPath();
-      path = join(dbPath, filePath);
-    }
+  Future<Database> _initDatabase() async {
+    final documentsDirectory = await getApplicationDocumentsDirectory();
+    final path = join(documentsDirectory.path, 'iptv_player.db');
+    AppLogger.log('Database: Opening database at $path');
 
     return await openDatabase(
       path,
       version: 3,
-      onCreate: _createDB,
-      onUpgrade: _upgradeDB,
+      onCreate: _onCreate,
+      onUpgrade: _onUpgrade,
     );
   }
 
-  /// Self-healing: Check if all expected columns exist, add them if missing.
-  /// This handles cases where onUpgrade might have been skipped or failed.
-  Future<void> _ensureSchemaConsistency(Database db) async {
-    if (kIsWeb) return; // PRAGMA not supported on web-ffi usually
-
-    try {
-      final List<Map<String, dynamic>> columns = await db.rawQuery('PRAGMA table_info(configurations)');
-      final existingColumns = columns.map((c) => c['name'] as String).toSet();
-
-      final requiredColumns = {
-        'order_index': 'INTEGER DEFAULT 0',
-        'last_refreshed': 'TEXT',
-        'expiration_date': 'TEXT',
-        'account_status': 'TEXT',
-      };
-
-      for (var entry in requiredColumns.entries) {
-        if (!existingColumns.contains(entry.key)) {
-          debugPrint('Database: Column ${entry.key} missing, performing hotfix...');
-          await db.execute('ALTER TABLE configurations ADD COLUMN ${entry.key} ${entry.value}');
-        }
-      }
-    } catch (e) {
-      debugPrint('Database self-healing failed: $e');
-    }
-  }
-
-  Future<void> _createDB(Database db, int version) async {
+  Future<void> _onCreate(Database db, int version) async {
+    AppLogger.log('Database: Creating tables...');
     await db.execute('''
       CREATE TABLE configurations (
         id TEXT PRIMARY KEY,
@@ -99,82 +51,61 @@ class DatabaseHelper {
     await db.execute('''
       CREATE TABLE favorites (
         channel_id TEXT PRIMARY KEY,
-        added_at TEXT NOT NULL
+        created_at TEXT NOT NULL
       )
     ''');
 
     await db.execute('''
-      CREATE TABLE history (
+      CREATE TABLE browse_history (
         channel_id TEXT PRIMARY KEY,
         watched_at TEXT NOT NULL
       )
     ''');
-
-    await db.execute('''
-      CREATE TABLE channel_cache (
-        config_id TEXT NOT NULL,
-        channel_id TEXT NOT NULL,
-        name TEXT NOT NULL,
-        stream_url TEXT NOT NULL,
-        logo_url TEXT,
-        category TEXT,
-        cached_at TEXT NOT NULL,
-        PRIMARY KEY (config_id, channel_id)
-      )
-    ''');
-
-    await db.execute('CREATE INDEX idx_favorites_added_at ON favorites(added_at)');
-    await db.execute('CREATE INDEX idx_history_watched_at ON history(watched_at)');
-    await db.execute('CREATE INDEX idx_channel_cache_config ON channel_cache(config_id)');
-    await db.execute('CREATE INDEX idx_channel_cache_id ON channel_cache(channel_id)');
+    
+    // Index for faster lookups
+    await db.execute('CREATE INDEX idx_favorites_id ON favorites(channel_id)');
   }
 
-  Future<void> _upgradeDB(Database db, int oldVersion, int newVersion) async {
+  Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {
+    AppLogger.log('Database: Upgrading from $oldVersion to $newVersion');
     if (oldVersion < 2) {
-      try {
-        await db.execute('ALTER TABLE configurations ADD COLUMN order_index INTEGER DEFAULT 0');
-      } catch (e) {}
+      await db.execute('ALTER TABLE configurations ADD COLUMN order_index INTEGER DEFAULT 0');
     }
     if (oldVersion < 3) {
-      try {
-        await db.execute('ALTER TABLE configurations ADD COLUMN last_refreshed TEXT');
-        await db.execute('ALTER TABLE configurations ADD COLUMN expiration_date TEXT');
-        await db.execute('ALTER TABLE configurations ADD COLUMN account_status TEXT');
-      } catch (e) {}
+      // Add missing fields for Xtream info
+      await _addColumnIfNotExists(db, 'configurations', 'last_refreshed', 'TEXT');
+      await _addColumnIfNotExists(db, 'configurations', 'expiration_date', 'TEXT');
+      await _addColumnIfNotExists(db, 'configurations', 'account_status', 'TEXT');
     }
+  }
+
+  Future<void> _addColumnIfNotExists(Database db, String table, String column, String type) async {
+    try {
+      final columns = await db.rawQuery('PRAGMA table_info($table)');
+      final exists = columns.any((c) => c['name'] == column);
+      if (!exists) {
+        await db.execute('ALTER TABLE $table ADD COLUMN $column $type');
+        AppLogger.log('Database: Added column $column to $table');
+      }
+    } catch (e) {
+      AppLogger.log('Database Error: Failed to add column $column: $e');
+    }
+  }
+
+  /// Self-healing check to ensure schema is consistent across platforms
+  Future<void> ensureSchemaConsistency() async {
+    final db = await database;
+    AppLogger.log('Database: Running self-healing schema check...');
+    await _addColumnIfNotExists(db, 'configurations', 'order_index', 'INTEGER DEFAULT 0');
+    await _addColumnIfNotExists(db, 'configurations', 'last_refreshed', 'TEXT');
+    await _addColumnIfNotExists(db, 'configurations', 'expiration_date', 'TEXT');
+    await _addColumnIfNotExists(db, 'configurations', 'account_status', 'TEXT');
   }
 
   Future<void> close() async {
-    final db = await database;
-    await db.close();
-    _database = null;
-  }
-
-  Future<void> deleteDatabase() async {
-    if (kIsWeb) {
-      await databaseFactory.deleteDatabase('iptv_player.db');
-    } else {
-      final dbPath = await getDatabasesPath();
-      final path = join(dbPath, 'iptv_player.db');
-      if (await File(path).exists()) {
-        await File(path).delete();
-      }
+    if (_database != null) {
+      await _database!.close();
+      _database = null;
     }
-    _database = null;
-  }
-
-  Future<int> getDatabaseSize() async {
-    if (kIsWeb) return 0;
-    final dbPath = await getDatabasesPath();
-    final path = join(dbPath, 'iptv_player.db');
-    if (await File(path).exists()) {
-      return await File(path).length();
-    }
-    return 0;
-  }
-
-  Future<void> vacuum() async {
-    final db = await database;
-    await db.execute('VACUUM');
   }
 }
