@@ -57,6 +57,7 @@ dependencies:
   
   # Image caching
   cached_network_image: ^3.4.1
+  shimmer: ^3.0.0
   
   # UI
   cupertino_icons: ^1.0.8

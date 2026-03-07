@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:uuid/uuid.dart';
+import 'package:file_picker/file_picker.dart';
 import '../../models/configuration.dart';
 import '../../viewmodels/configuration_viewmodel.dart';
 
@@ -21,6 +22,7 @@ class _ConfigurationScreenState extends State<ConfigurationScreen> {
   final _passwordController = TextEditingController();
   
   ConfigType _selectedType = ConfigType.m3uNetwork;
+  String? _localFilePath;
   bool _isLoading = false;
 
   @override
@@ -37,6 +39,8 @@ class _ConfigurationScreenState extends State<ConfigurationScreen> {
         _passwordController.text = creds['password'] ?? '';
       } else if (_selectedType == ConfigType.m3uNetwork || _selectedType == ConfigType.directLink) {
         _urlController.text = creds['url'] ?? '';
+      } else if (_selectedType == ConfigType.m3uLocal) {
+        _localFilePath = creds['filePath'];
       }
     }
   }
@@ -48,6 +52,22 @@ class _ConfigurationScreenState extends State<ConfigurationScreen> {
     _usernameController.dispose();
     _passwordController.dispose();
     super.dispose();
+  }
+
+  Future<void> _pickM3UFile() async {
+    final result = await FilePicker.platform.pickFiles(
+      type: FileType.custom,
+      allowedExtensions: ['m3u', 'm3u8'],
+    );
+
+    if (result != null && result.files.single.path != null) {
+      setState(() {
+        _localFilePath = result.files.single.path;
+        if (_nameController.text.isEmpty) {
+          _nameController.text = result.files.single.name;
+        }
+      });
+    }
   }
 
   @override
@@ -63,25 +83,25 @@ class _ConfigurationScreenState extends State<ConfigurationScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Type Selection
               const Text('Source Type', style: TextStyle(fontWeight: FontWeight.bold)),
               const SizedBox(height: 8),
-              SegmentedButton<ConfigType>(
-                segments: const [
-                  ButtonSegment(value: ConfigType.m3uNetwork, label: Text('M3U URL'), icon: Icon(Icons.link)),
-                  ButtonSegment(value: ConfigType.xtream, label: Text('Xtream'), icon: Icon(Icons.dns)),
-                  ButtonSegment(value: ConfigType.directLink, label: Text('Direct'), icon: Icon(Icons.play_circle)),
-                ],
-                selected: {_selectedType},
-                onSelectionChanged: (Set<ConfigType> newSelection) {
-                  setState(() {
-                    _selectedType = newSelection.first;
-                  });
-                },
+              SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: SegmentedButton<ConfigType>(
+                  segments: const [
+                    ButtonSegment(value: ConfigType.m3uNetwork, label: Text('URL'), icon: Icon(Icons.link)),
+                    ButtonSegment(value: ConfigType.m3uLocal, label: Text('File'), icon: Icon(Icons.file_open)),
+                    ButtonSegment(value: ConfigType.xtream, label: Text('Xtream'), icon: Icon(Icons.dns)),
+                    ButtonSegment(value: ConfigType.directLink, label: Text('Direct'), icon: Icon(Icons.play_circle)),
+                  ],
+                  selected: {_selectedType},
+                  onSelectionChanged: (Set<ConfigType> newSelection) {
+                    setState(() => _selectedType = newSelection.first);
+                  },
+                ),
               ),
               const SizedBox(height: 24),
 
-              // Common Name Field
               TextFormField(
                 controller: _nameController,
                 decoration: const InputDecoration(
@@ -93,35 +113,36 @@ class _ConfigurationScreenState extends State<ConfigurationScreen> {
               ),
               const SizedBox(height: 16),
 
-              // Conditional Fields based on Type
-              if (_selectedType == ConfigType.xtream) ...[
+              if (_selectedType == ConfigType.m3uLocal) ...[
+                ListTile(
+                  title: Text(_localFilePath == null ? 'No file selected' : 'Selected: ${_localFilePath!.split('/').last}'),
+                  subtitle: Text(_localFilePath ?? 'Pick a .m3u or .m3u8 file'),
+                  leading: const Icon(Icons.insert_drive_file),
+                  trailing: ElevatedButton(
+                    onPressed: _pickM3UFile,
+                    child: const Text('Pick File'),
+                  ),
+                  shape: RoundedRectangleBorder(
+                    side: BorderSide(color: Colors.grey.shade400),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                ),
+              ] else if (_selectedType == ConfigType.xtream) ...[
                 TextFormField(
                   controller: _urlController,
-                  decoration: const InputDecoration(
-                    labelText: 'Server URL (e.g. http://provider.com:8080)',
-                    border: OutlineInputBorder(),
-                    prefixIcon: Icon(Icons.computer),
-                  ),
+                  decoration: const InputDecoration(labelText: 'Server URL', border: OutlineInputBorder(), prefixIcon: Icon(Icons.computer)),
                   validator: (value) => value == null || value.isEmpty ? 'Required' : null,
                 ),
                 const SizedBox(height: 16),
                 TextFormField(
                   controller: _usernameController,
-                  decoration: const InputDecoration(
-                    labelText: 'Username',
-                    border: OutlineInputBorder(),
-                    prefixIcon: Icon(Icons.person),
-                  ),
+                  decoration: const InputDecoration(labelText: 'Username', border: OutlineInputBorder(), prefixIcon: Icon(Icons.person)),
                   validator: (value) => value == null || value.isEmpty ? 'Required' : null,
                 ),
                 const SizedBox(height: 16),
                 TextFormField(
                   controller: _passwordController,
-                  decoration: const InputDecoration(
-                    labelText: 'Password',
-                    border: OutlineInputBorder(),
-                    prefixIcon: Icon(Icons.lock),
-                  ),
+                  decoration: const InputDecoration(labelText: 'Password', border: OutlineInputBorder(), prefixIcon: Icon(Icons.lock)),
                   obscureText: true,
                   validator: (value) => value == null || value.isEmpty ? 'Required' : null,
                 ),
@@ -129,7 +150,7 @@ class _ConfigurationScreenState extends State<ConfigurationScreen> {
                 TextFormField(
                   controller: _urlController,
                   decoration: InputDecoration(
-                    labelText: _selectedType == ConfigType.directLink ? 'Stream URL (.m3u8, .ts, etc)' : 'M3U Playlist URL',
+                    labelText: _selectedType == ConfigType.directLink ? 'Stream URL' : 'M3U Playlist URL',
                     border: const OutlineInputBorder(),
                     prefixIcon: const Icon(Icons.link),
                   ),
@@ -143,9 +164,7 @@ class _ConfigurationScreenState extends State<ConfigurationScreen> {
                 height: 50,
                 child: ElevatedButton(
                   onPressed: _isLoading ? null : _saveConfiguration,
-                  child: _isLoading 
-                    ? const CircularProgressIndicator() 
-                    : Text(widget.configuration == null ? 'Save & Add' : 'Update'),
+                  child: _isLoading ? const CircularProgressIndicator() : Text(widget.configuration == null ? 'Save & Add' : 'Update'),
                 ),
               ),
             ],
@@ -156,10 +175,13 @@ class _ConfigurationScreenState extends State<ConfigurationScreen> {
   }
 
   Future<void> _saveConfiguration() async {
+    if (_selectedType == ConfigType.m3uLocal && _localFilePath == null) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Please pick a file')));
+      return;
+    }
     if (!_formKey.currentState!.validate()) return;
 
     setState(() => _isLoading = true);
-
     try {
       final id = widget.configuration?.id ?? const Uuid().v4();
       final Map<String, dynamic> credentials = {};
@@ -168,6 +190,8 @@ class _ConfigurationScreenState extends State<ConfigurationScreen> {
         credentials['serverUrl'] = _urlController.text.trim();
         credentials['username'] = _usernameController.text.trim();
         credentials['password'] = _passwordController.text.trim();
+      } else if (_selectedType == ConfigType.m3uLocal) {
+        credentials['filePath'] = _localFilePath;
       } else {
         credentials['url'] = _urlController.text.trim();
       }
@@ -187,16 +211,9 @@ class _ConfigurationScreenState extends State<ConfigurationScreen> {
       } else {
         await context.read<ConfigurationViewModel>().updateConfiguration(config);
       }
-
-      if (mounted) {
-        Navigator.pop(context);
-      }
+      if (mounted) Navigator.pop(context);
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
-        );
-      }
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red));
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }

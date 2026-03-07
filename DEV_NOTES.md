@@ -20,10 +20,6 @@
     *   **SQL 批量查询**：实现 `getChannelsByIds` 方法，将检索复杂度从 O(N) 降低到 O(log N)。
 *   **效果**：海量数据下的收藏页实现“秒开”。
 
-### **1.3 确定性 ID (UUID v5)**
-*   **痛点**：原逻辑使用随机 UUID，每次刷新频道源会导致收藏和历史记录全部失效。
-*   **对策**：改用 **UUID v5**，基于 `configId + streamUrl` 生成确定性 ID。
-
 ---
 
 ## 2. 播放稳定性与渲染深度加固 (Stability)
@@ -36,46 +32,44 @@
 *   **现象**：macOS 下部分源加载 20-30 秒无任何反应，最终超时。
 *   **修复**：**UI 预渲染策略**。在 `PlayerScreen` 中，一旦 Controller 创建，立即将播放组件放入 Widget 树，确保原生渲染表面（Texture）第一时间建立。
 
-### **2.3 macOS 1ms 时长 Bug**
-*   **修复**：**虚假时长屏蔽**。屏蔽 10s 以内的“完成”状态判定，确保直播流不会误杀。
-
-### **2.4 播放自愈看门狗 (Auto-Reconnect)**
-*   **痛点**：视频播放一段时间后无故中断（Token 过期或服务端换源轮转）。
+### **2.3 播放自愈看门狗 (Auto-Reconnect)**
+*   **痛点**：视频播放一段时间后无故中断。
 *   **修复**：
-    *   **Stall 检测**：在 `PlayerService` 中增加 8 秒停顿监测，超时即触发错误。
-    *   **静默重连**：`PlayerViewModel` 捕获异常后自动执行最多 3 次静默重连（间隔 2s）。
-    *   **UI 反馈**：增加橙色 HUD 提示用户“正在自动恢复连接”。
+    *   **Stall 检测**：在 `PlayerService` 中增加停顿监测，超时即触发错误。
+    *   **静默重连**：`PlayerViewModel` 捕获异常后自动执行最多 3 次静默重连。
+
+### **2.4 UI 变更对播放稳定性的冲击 (Lessons Learned)**
+*   **教训**：在追求“纯净 UI”（如拦截全屏手势、禁用原生控制台）时，过度干预了 `Chewie` 的内部生命周期，导致 macOS 端的纹理绑定（Texture Binding）发生死锁，诱发 `error -12939`。
+*   **对策**：**回归原生控制台稳定性**。恢复 `showControls: true`，确保播放器初始化链路的完整性。
 
 ---
 
-## 3. 数据库深度加固与自愈 (Database v3)
+## 3. 导航鲁棒性与逃生通道 (UX Robustness)
 
-### **3.1 架构升级与迁移**
-*   **变更**：新增 `order_index`（排序）、`last_refreshed`、`expiration_date`、`account_status`（Xtream 状态）字段。
-*   **对策**：将数据库版本升至 **v3**，并实现 `onUpgrade` 逻辑。
-
-### **3.2 数据库自愈逻辑 (Self-Healing)**
-*   **痛点**：Android/macOS 覆盖安装时，若 `onUpgrade` 因非预期状态失败，会导致 SQL “Column not found” 崩溃。
-*   **对策**：在 `DatabaseHelper` 中增加 **`_ensureSchemaConsistency`** 检查。应用启动时自动对比 `PRAGMA table_info`，发现缺列则动态执行 `ALTER TABLE` 补齐。
+### **3.1 防止 UI “死锁”**
+*   **痛点**：播放报错时，全屏覆盖层挡住了所有交互，且 TopBar 被隐藏，导致用户无法返回主页。
+*   **修复**：
+    *   **AppBar 常驻**：将 `AppBar` 移出 `Stack` 的条件判断，确保左上角返回键在任何报错状态下始终可见。
+    *   **显式按钮**：在 `ErrorOverlay` 中强制加入【Retry】和【Back Home】按钮。
 
 ---
 
-## 4. 专业级功能增强 (Features)
+## 4. 核心功能扩展 (New Features)
 
-*   **首页拖拽排序**：采用 `ReorderableListView`，支持物理排序持久化。
-*   **单链接直接播放 (Direct Link)**：新增配置类型，支持不经过 M3U 解析直接开播单个 URL。
-*   **频道多选导出**：支持在频道列表中长按开启多选，一键导出为标准 M3U 文本或文件。
-*   **错误页快捷功能**：播放失败时提供 “Copy URL” 按钮，极大方便用户切换至外部播放器（如 IINA/VLC）。
+### **4.1 本地 M3U 文件导入**
+*   **实现**：集成 `file_picker` 插件，支持 `ConfigType.m3uLocal`。
+*   **优势**：支持手机/电脑本地离线播放列表，解决了部分服务器防火墙屏蔽 URL 请求的问题。
+
+### **4.2 手动主题管理 (Theme Persistence)**
+*   **实现**：增加 `ThemeProvider`，支持 `Light` / `Dark` / `System` 三态切换。
+*   **持久化**：使用 `shared_preferences` 存储用户偏好，确保 App 重启后主题状态一致。
 
 ---
 
 ## 5. 跨平台兼容性补丁
 
-*   **条件导入方案**：通过 `db_stub.dart` 和 `db_web.dart` 完美隔离了 Web 专属的 SQLite WASM 包，解决了 Native 端编译路径冲突。
-*   **macOS HTTP 权限**：全面放开 ATS 限制，支持 `NSAllowsArbitraryLoadsInWebContent`。
-*   **Android 防止熄屏 (Wakelock Fix)**：
-    *   **权限补全**：在 `AndroidManifest.xml` 中显式添加 `WAKE_LOCK` 权限（针对部分省电机型）。
-    *   **逻辑同步**：由于新版 `Chewie` 移除了内置锁参数，现统一由 `PlayerService` 显式维护 `WakelockPlus` 状态。
+*   **Android 防止熄屏 (Wakelock Fix)**：在 `AndroidManifest.xml` 中添加 `WAKE_LOCK` 权限，并显式维护锁状态。
+*   **数据库自愈 (Self-Healing)**：启动时自动扫描并补全缺失的 SQL 字段（如 `order_index`），防止覆盖安装导致的崩溃。
 
 ---
 **Last Updated**: 2026-03-07

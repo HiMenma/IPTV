@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../models/configuration.dart';
 import '../../viewmodels/configuration_viewmodel.dart';
+import '../../providers/theme_provider.dart';
 import '../widgets/configuration_card.dart';
 import 'configuration_screen.dart';
 import 'channel_list_screen.dart';
@@ -28,6 +29,20 @@ class _HomeScreenState extends State<HomeScreen> {
       appBar: AppBar(
         title: const Text('IPTV Player'),
         actions: [
+          Consumer<ThemeProvider>(
+            builder: (context, themeProvider, child) {
+              return PopupMenuButton<ThemeMode>(
+                icon: Icon(_getThemeIcon(themeProvider.themeMode)),
+                tooltip: 'Theme Mode',
+                onSelected: (mode) => themeProvider.setThemeMode(mode),
+                itemBuilder: (context) => [
+                  const PopupMenuItem(value: ThemeMode.system, child: Text('System Default')),
+                  const PopupMenuItem(value: ThemeMode.light, child: Text('Light Mode')),
+                  const PopupMenuItem(value: ThemeMode.dark, child: Text('Dark Mode')),
+                ],
+              );
+            },
+          ),
           IconButton(
             icon: const Icon(Icons.add),
             tooltip: 'Add Configuration',
@@ -170,6 +185,14 @@ class _HomeScreenState extends State<HomeScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Refreshed ${config.name}')),
       );
+    }
+  }
+
+  IconData _getThemeIcon(ThemeMode mode) {
+    switch (mode) {
+      case ThemeMode.system: return Icons.brightness_auto;
+      case ThemeMode.light: return Icons.light_mode;
+      case ThemeMode.dark: return Icons.dark_mode;
     }
   }
 }

@@ -2,13 +2,14 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'dart:io';
-import 'package:flutter/foundation.dart' show kIsWeb; // Added for kIsWeb
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:path_provider/path_provider.dart';
 import '../../models/configuration.dart';
 import '../../models/channel.dart';
 import '../../viewmodels/channel_viewmodel.dart';
 import '../../services/m3u_service.dart';
 import '../widgets/channel_list_item.dart';
+import '../widgets/channel_grid_item.dart';
 import 'player_screen.dart';
 
 class ChannelListScreen extends StatefulWidget {
@@ -28,6 +29,9 @@ class _ChannelListScreenState extends State<ChannelListScreen> {
   // Selection mode state
   bool _isSelectionMode = false;
   final Set<String> _selectedChannelIds = {};
+
+  // View mode state
+  bool _isGridView = false;
 
   @override
   void initState() {
@@ -83,6 +87,11 @@ class _ChannelListScreenState extends State<ChannelListScreen> {
                 ),
               ] else ...[
                 IconButton(
+                  icon: Icon(_isGridView ? Icons.view_list : Icons.grid_view),
+                  tooltip: _isGridView ? 'List View' : 'Grid View',
+                  onPressed: () => setState(() => _isGridView = !_isGridView),
+                ),
+                IconButton(
                   icon: const Icon(Icons.refresh),
                   onPressed: () => viewModel.loadChannels(widget.configuration.id, forceRefresh: true),
                 ),
@@ -93,7 +102,7 @@ class _ChannelListScreenState extends State<ChannelListScreen> {
             children: [
               if (!_isSelectionMode) _buildSearchAndFilter(categories),
               Expanded(
-                child: _buildChannelList(viewModel, filteredChannels),
+                child: _buildChannelContainer(viewModel, filteredChannels),
               ),
             ],
           ),
@@ -154,10 +163,48 @@ class _ChannelListScreenState extends State<ChannelListScreen> {
     );
   }
 
-  Widget _buildChannelList(ChannelViewModel viewModel, List<Channel> channels) {
+  Widget _buildChannelContainer(ChannelViewModel viewModel, List<Channel> channels) {
     if (viewModel.isLoading) return const Center(child: CircularProgressIndicator());
     if (viewModel.error != null) return Center(child: Text(viewModel.error!, style: const TextStyle(color: Colors.red)));
     if (channels.isEmpty) return const Center(child: Text('No channels found'));
+
+    if (_isGridView) {
+      return GridView.builder(
+        padding: const EdgeInsets.all(12),
+        gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+          maxCrossAxisExtent: 150,
+          childAspectRatio: 0.8,
+          crossAxisSpacing: 12,
+          mainAxisSpacing: 12,
+        ),
+        itemCount: channels.length,
+        itemBuilder: (context, index) {
+          final channel = channels[index];
+          final isSelected = _selectedChannelIds.contains(channel.id);
+          return ChannelGridItem(
+            channel: channel,
+            isFavorite: viewModel.isFavorite(channel.id),
+            isSelected: _isSelectionMode ? isSelected : false,
+            onTap: () {
+              if (_isSelectionMode) {
+                _toggleSelection(channel.id);
+              } else {
+                _navigateToPlayer(context, channel);
+              }
+            },
+            onLongPress: () {
+              if (!_isSelectionMode) {
+                setState(() {
+                  _isSelectionMode = true;
+                  _selectedChannelIds.add(channel.id);
+                });
+              }
+            },
+            onFavoriteToggle: () => viewModel.toggleFavorite(channel.id),
+          );
+        },
+      );
+    }
 
     return ListView.builder(
       padding: const EdgeInsets.symmetric(vertical: 8),
@@ -236,7 +283,6 @@ class _ChannelListScreenState extends State<ChannelListScreen> {
     
     try {
       if (kIsWeb) {
-        // For Web, copy to clipboard as file saving is complex
         await Clipboard.setData(ClipboardData(text: m3uContent));
         if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('M3U content copied to clipboard (Web)')));
       } else {
@@ -244,7 +290,6 @@ class _ChannelListScreenState extends State<ChannelListScreen> {
         final file = File('${directory.path}/exported_channels.m3u');
         await file.writeAsString(m3uContent);
         
-        // Use clipboard as a fallback or show success
         await Clipboard.setData(ClipboardData(text: m3uContent));
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(

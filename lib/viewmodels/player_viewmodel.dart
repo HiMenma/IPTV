@@ -53,6 +53,7 @@ class PlayerViewModel extends ChangeNotifier {
       _state = newState;
       if (newState == PlayerState.playing) {
         _retryCount = 0; // Reset count on success
+        _error = null;   // Clear error message on success!
       }
       notifyListeners();
     });
@@ -69,11 +70,12 @@ class PlayerViewModel extends ChangeNotifier {
     
     if (_retryCount < _maxRetries && _currentChannel != null) {
       _retryCount++;
-      _error = 'Connection lost. Retrying ($_retryCount/$_maxRetries)...';
+      _error = 'Connection error. Retrying ($_retryCount/$_maxRetries)...';
       notifyListeners();
       
       _reconnectTimer?.cancel();
-      _reconnectTimer = Timer(const Duration(seconds: 2), () {
+      // Wait slightly longer (3s) to allow system to clear video buffers
+      _reconnectTimer = Timer(const Duration(seconds: 3), () {
         _performReconnect();
       });
     } else {

@@ -31,11 +31,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
 
   @override
   void dispose() {
-    try {
-      _playerViewModel?.stop();
-    } catch (e) {
-      debugPrint('Error stopping playback during dispose: $e');
-    }
+    try { _playerViewModel?.stop(); } catch (e) {}
     super.dispose();
   }
 
@@ -44,48 +40,39 @@ class _PlayerScreenState extends State<PlayerScreen> {
     return Consumer<PlayerViewModel>(
       builder: (context, viewModel, child) {
         return Scaffold(
+          backgroundColor: Colors.black,
           appBar: AppBar(
-            title: Text(widget.channel.name),
-            backgroundColor: Theme.of(context).colorScheme.inversePrimary,
+            title: Text(widget.channel.name, style: const TextStyle(color: Colors.white)),
+            backgroundColor: Colors.black,
+            elevation: 0,
+            iconTheme: const IconThemeData(color: Colors.white),
+            leading: IconButton(
+              icon: const Icon(Icons.arrow_back),
+              onPressed: () => Navigator.pop(context),
+            ),
           ),
-          body: Column(
+          body: Stack(
             children: [
-              // Video player area
-              Expanded(
-                child: _buildPlayerArea(viewModel),
+              // Main Player Area
+              Center(
+                child: _buildPlayerWidget(viewModel),
               ),
-              // Channel information
-              _buildChannelInfo(),
+              
+              // Loading
+              if (viewModel.state == PlayerState.preparing || viewModel.state == PlayerState.idle)
+                const Center(child: CircularProgressIndicator(color: Colors.white)),
+              
+              // Reconnecting Overlay (Non-blocking)
+              if (viewModel.isRetrying)
+                _buildReconnectOverlay(viewModel),
+
+              // Fatal Error Overlay (With Escape Buttons)
+              if (viewModel.error != null && viewModel.state == PlayerState.error && !viewModel.isRetrying) 
+                _buildErrorOverlay(viewModel),
             ],
           ),
         );
       },
-    );
-  }
-
-  Widget _buildPlayerArea(PlayerViewModel viewModel) {
-    return Container(
-      color: Colors.black,
-      child: Stack(
-        children: [
-          // Player widget
-          Center(
-            child: _buildPlayerWidget(viewModel),
-          ),
-          
-          // Initial Loading
-          if (viewModel.state == PlayerState.preparing || viewModel.state == PlayerState.idle)
-            const Center(child: CircularProgressIndicator(color: Colors.white)),
-          
-          // Auto-reconnect HUD
-          if (viewModel.isRetrying)
-            _buildReconnectOverlay(viewModel),
-
-          // Error overlay (only if not currently retrying)
-          if (viewModel.error != null && !viewModel.isRetrying) 
-            _buildErrorOverlay(viewModel),
-        ],
-      ),
     );
   }
 
@@ -99,17 +86,14 @@ class _PlayerScreenState extends State<PlayerScreen> {
 
   Widget _buildReconnectOverlay(PlayerViewModel viewModel) {
     return Container(
-      color: Colors.black45,
+      color: Colors.black54,
       child: Center(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             const CircularProgressIndicator(color: Colors.orange),
             const SizedBox(height: 16),
-            Text(
-              viewModel.error ?? 'Reconnecting...',
-              style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
-            ),
+            Text(viewModel.error ?? 'Reconnecting...', style: const TextStyle(color: Colors.white)),
           ],
         ),
       ),
@@ -118,117 +102,51 @@ class _PlayerScreenState extends State<PlayerScreen> {
 
   Widget _buildErrorOverlay(PlayerViewModel viewModel) {
     return Container(
-      color: Colors.black.withOpacity(0.8),
+      color: Colors.black.withOpacity(0.9),
+      width: double.infinity,
+      height: double.infinity,
       child: Center(
         child: SingleChildScrollView(
-          padding: const EdgeInsets.all(24.0),
+          padding: const EdgeInsets.all(32),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(Icons.error_outline, size: 64, color: Theme.of(context).colorScheme.error),
-              const SizedBox(height: 16),
-              const Text(
-                'Playback Error',
-                style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold),
-              ),
-              const SizedBox(height: 8),
+              const Icon(Icons.error_outline, size: 72, color: Colors.redAccent),
+              const SizedBox(height: 24),
+              const Text('Playback Error', style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold)),
+              const SizedBox(height: 12),
               Text(
-                viewModel.error ?? 'Unknown error occurred',
+                viewModel.error ?? 'Connection failed',
                 textAlign: TextAlign.center,
                 style: const TextStyle(color: Colors.white70),
               ),
-              const SizedBox(height: 24),
+              const SizedBox(height: 40),
               
-              Wrap(
-                alignment: WrapAlignment.center,
-                spacing: 12,
-                runSpacing: 12,
-                children: [
-                  ElevatedButton.icon(
-                    onPressed: () => viewModel.playChannel(widget.channel),
-                    icon: const Icon(Icons.refresh),
-                    label: const Text('Retry Now'),
-                  ),
-                  FilledButton.icon(
-                    onPressed: () {
-                      Clipboard.setData(ClipboardData(text: widget.channel.streamUrl));
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('Link copied to clipboard'))
-                      );
-                    },
-                    icon: const Icon(Icons.copy),
-                    label: const Text('Copy URL'),
-                    style: FilledButton.styleFrom(
-                      backgroundColor: Colors.white24,
-                      foregroundColor: Colors.white,
-                    ),
-                  ),
-                  OutlinedButton.icon(
-                    onPressed: () => Navigator.pop(context),
-                    icon: const Icon(Icons.arrow_back),
-                    label: const Text('Back'),
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: Colors.white,
-                      side: const BorderSide(color: Colors.white),
-                    ),
-                  ),
-                ],
+              // PRIMARY ESCAPE PATH
+              ElevatedButton.icon(
+                onPressed: () => viewModel.playChannel(widget.channel),
+                icon: const Icon(Icons.refresh),
+                label: const Text('Retry Playback'),
+                style: ElevatedButton.styleFrom(
+                  minimumSize: const Size(200, 50),
+                  backgroundColor: Theme.of(context).colorScheme.primary,
+                  foregroundColor: Colors.white,
+                ),
+              ),
+              const SizedBox(height: 16),
+              OutlinedButton.icon(
+                onPressed: () => Navigator.pop(context),
+                icon: const Icon(Icons.arrow_back),
+                label: const Text('Back to List'),
+                style: OutlinedButton.styleFrom(
+                  minimumSize: const Size(200, 50),
+                  foregroundColor: Colors.white,
+                  side: const BorderSide(color: Colors.white54),
+                ),
               ),
             ],
           ),
         ),
-      ),
-    );
-  }
-
-  Widget _buildChannelInfo() {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surface,
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.1),
-            blurRadius: 4,
-            offset: const Offset(0, -2),
-          ),
-        ],
-      ),
-      child: Row(
-        children: [
-          if (widget.channel.logoUrl != null && widget.channel.logoUrl!.isNotEmpty)
-            Padding(
-              padding: const EdgeInsets.only(right: 16),
-              child: Image.network(
-                widget.channel.logoUrl!,
-                width: 60,
-                height: 60,
-                fit: BoxFit.contain,
-                errorBuilder: (context, error, stackTrace) => const Icon(Icons.tv, size: 60),
-              ),
-            ),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  widget.channel.name,
-                  style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-                if (widget.channel.category != null)
-                  Text(
-                    widget.channel.category!,
-                    style: TextStyle(
-                      fontSize: 14,
-                      color: Theme.of(context).colorScheme.onSurfaceVariant,
-                    ),
-                  ),
-              ],
-            ),
-          ),
-        ],
       ),
     );
   }
