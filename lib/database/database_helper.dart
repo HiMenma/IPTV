@@ -14,27 +14,25 @@ class DatabaseHelper {
 
   DatabaseHelper._init();
 
-  /// Initialize the database factory for the current platform.
   static void initPlatformFactory() {
     if (kIsWeb) {
       platform_db.initWebFactory();
-      debugPrint('Database: Global factory set to FfiWeb');
     } else if (Platform.isWindows || Platform.isLinux) {
       sqfliteFfiInit();
       databaseFactory = databaseFactoryFfi;
-      debugPrint('Database: Global factory set to Ffi (Desktop)');
     }
   }
 
   Future<Database> get database async {
     if (_database != null) return _database!;
     _database = await _initDB('iptv_player.db');
+    // Run self-healing check after opening
+    await _ensureSchemaConsistency(_database!);
     return _database!;
   }
 
   Future<Database> _initDB(String filePath) async {
     String path;
-    
     if (kIsWeb) {
       platform_db.initWebFactory();
       path = filePath;
@@ -49,10 +47,37 @@ class DatabaseHelper {
 
     return await openDatabase(
       path,
-      version: 1,
+      version: 3,
       onCreate: _createDB,
       onUpgrade: _upgradeDB,
     );
+  }
+
+  /// Self-healing: Check if all expected columns exist, add them if missing.
+  /// This handles cases where onUpgrade might have been skipped or failed.
+  Future<void> _ensureSchemaConsistency(Database db) async {
+    if (kIsWeb) return; // PRAGMA not supported on web-ffi usually
+
+    try {
+      final List<Map<String, dynamic>> columns = await db.rawQuery('PRAGMA table_info(configurations)');
+      final existingColumns = columns.map((c) => c['name'] as String).toSet();
+
+      final requiredColumns = {
+        'order_index': 'INTEGER DEFAULT 0',
+        'last_refreshed': 'TEXT',
+        'expiration_date': 'TEXT',
+        'account_status': 'TEXT',
+      };
+
+      for (var entry in requiredColumns.entries) {
+        if (!existingColumns.contains(entry.key)) {
+          debugPrint('Database: Column ${entry.key} missing, performing hotfix...');
+          await db.execute('ALTER TABLE configurations ADD COLUMN ${entry.key} ${entry.value}');
+        }
+      }
+    } catch (e) {
+      debugPrint('Database self-healing failed: $e');
+    }
   }
 
   Future<void> _createDB(Database db, int version) async {
@@ -63,7 +88,11 @@ class DatabaseHelper {
         type TEXT NOT NULL,
         credentials TEXT NOT NULL,
         created_at TEXT NOT NULL,
-        updated_at TEXT NOT NULL
+        updated_at TEXT NOT NULL,
+        order_index INTEGER DEFAULT 0,
+        last_refreshed TEXT,
+        expiration_date TEXT,
+        account_status TEXT
       )
     ''');
 
@@ -100,7 +129,20 @@ class DatabaseHelper {
     await db.execute('CREATE INDEX idx_channel_cache_id ON channel_cache(channel_id)');
   }
 
-  Future<void> _upgradeDB(Database db, int oldVersion, int newVersion) async {}
+  Future<void> _upgradeDB(Database db, int oldVersion, int newVersion) async {
+    if (oldVersion < 2) {
+      try {
+        await db.execute('ALTER TABLE configurations ADD COLUMN order_index INTEGER DEFAULT 0');
+      } catch (e) {}
+    }
+    if (oldVersion < 3) {
+      try {
+        await db.execute('ALTER TABLE configurations ADD COLUMN last_refreshed TEXT');
+        await db.execute('ALTER TABLE configurations ADD COLUMN expiration_date TEXT');
+        await db.execute('ALTER TABLE configurations ADD COLUMN account_status TEXT');
+      } catch (e) {}
+    }
+  }
 
   Future<void> close() async {
     final db = await database;

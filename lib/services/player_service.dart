@@ -64,18 +64,18 @@ class PlayerService {
       
       _setupVideoPlayerListeners();
       
-      // Initialize with 20s timeout
+      // Initialize with 25s timeout for slow IPTV sources
       await _videoController!.initialize().timeout(
-        const Duration(seconds: 20),
+        const Duration(seconds: 25),
         onTimeout: () {
           AppLogger.log('Player Error: Initialization Timeout');
-          throw Exception('Connection timeout during initialization');
+          throw Exception('Connection timeout during initialization (25s)');
         },
       );
       
       AppLogger.log('Player: Initialization complete. Size: ${_videoController!.value.size}');
       
-      // Create Chewie controller
+      // Create Chewie controller with live optimization
       _chewieController = ChewieController(
         videoPlayerController: _videoController!,
         autoPlay: true,
@@ -98,9 +98,9 @@ class PlayerService {
       
       await _videoController!.setVolume(_currentVolume);
       
-      // macOS/Web specific fix: delay to ensure texture binding
+      // macOS specific fix: explicit delay to ensure texture binding succeeds
       if (Platform.isMacOS) {
-        await Future.delayed(const Duration(milliseconds: 500));
+        await Future.delayed(const Duration(milliseconds: 600));
         if (_videoController != null && !_videoController!.value.isPlaying) {
           await _videoController!.play();
         }
@@ -143,7 +143,7 @@ class PlayerService {
         }
       }
       
-      // Improved completion check for IPTV: 1ms Bug Fix
+      // IPTV Stability: 1ms Bug Fix & Fake duration protection
       // Ignore completion for suspiciously short durations (< 10s)
       bool isSuspiciouslyShort = value.duration.inSeconds < 10;
       

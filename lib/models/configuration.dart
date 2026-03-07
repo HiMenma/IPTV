@@ -1,16 +1,10 @@
+import 'dart:convert';
+
 enum ConfigType {
   xtream,
+  m3uNetwork,
   m3uLocal,
-  m3uNetwork;
-
-  String toJson() => name;
-
-  static ConfigType fromJson(String json) {
-    return ConfigType.values.firstWhere(
-      (type) => type.name == json,
-      orElse: () => throw ArgumentError('Invalid ConfigType: $json'),
-    );
-  }
+  directLink,
 }
 
 class Configuration {
@@ -19,9 +13,13 @@ class Configuration {
   final ConfigType type;
   final Map<String, dynamic> credentials;
   final DateTime createdAt;
+  final DateTime updatedAt;
+  final int orderIndex;
+  
+  // Xtream specific fields
   final DateTime? lastRefreshed;
-  final DateTime? expirationDate; // For Xtream accounts
-  final String? accountStatus; // For Xtream accounts
+  final DateTime? expirationDate;
+  final String? accountStatus;
 
   Configuration({
     required this.id,
@@ -29,74 +27,64 @@ class Configuration {
     required this.type,
     required this.credentials,
     required this.createdAt,
+    required this.updatedAt,
+    this.orderIndex = 0,
     this.lastRefreshed,
     this.expirationDate,
     this.accountStatus,
   });
 
-  Map<String, dynamic> toJson() {
+  Map<String, dynamic> toMap() {
     return {
       'id': id,
       'name': name,
-      'type': type.toJson(),
-      'credentials': credentials,
-      'createdAt': createdAt.toIso8601String(),
-      'lastRefreshed': lastRefreshed?.toIso8601String(),
-      'expirationDate': expirationDate?.toIso8601String(),
-      'accountStatus': accountStatus,
+      'type': type.name,
+      'credentials': jsonEncode(credentials),
+      'created_at': createdAt.toIso8601String(),
+      'updated_at': updatedAt.toIso8601String(),
+      'order_index': orderIndex,
+      'last_refreshed': lastRefreshed?.toIso8601String(),
+      'expiration_date': expirationDate?.toIso8601String(),
+      'account_status': accountStatus,
     };
   }
 
-  factory Configuration.fromJson(Map<String, dynamic> json) {
+  factory Configuration.fromMap(Map<String, dynamic> map) {
     return Configuration(
-      id: json['id'] as String,
-      name: json['name'] as String,
-      type: ConfigType.fromJson(json['type'] as String),
-      credentials: Map<String, dynamic>.from(json['credentials'] as Map),
-      createdAt: DateTime.parse(json['createdAt'] as String),
-      lastRefreshed: json['lastRefreshed'] != null
-          ? DateTime.parse(json['lastRefreshed'] as String)
-          : null,
-      expirationDate: json['expirationDate'] != null
-          ? DateTime.parse(json['expirationDate'] as String)
-          : null,
-      accountStatus: json['accountStatus'] as String?,
+      id: map['id'] as String,
+      name: map['name'] as String,
+      type: ConfigType.values.byName(map['type'] as String),
+      credentials: jsonDecode(map['credentials'] as String) as Map<String, dynamic>,
+      createdAt: DateTime.parse(map['created_at'] as String),
+      updatedAt: DateTime.parse(map['updated_at'] as String),
+      orderIndex: map['order_index'] as int? ?? 0,
+      lastRefreshed: map['last_refreshed'] != null ? DateTime.parse(map['last_refreshed'] as String) : null,
+      expirationDate: map['expiration_date'] != null ? DateTime.parse(map['expiration_date'] as String) : null,
+      accountStatus: map['account_status'] as String?,
     );
   }
 
-  @override
-  bool operator ==(Object other) {
-    if (identical(this, other)) return true;
-    return other is Configuration &&
-        other.id == id &&
-        other.name == name &&
-        other.type == type &&
-        _mapEquals(other.credentials, credentials) &&
-        other.createdAt == createdAt &&
-        other.lastRefreshed == lastRefreshed &&
-        other.expirationDate == expirationDate &&
-        other.accountStatus == accountStatus;
-  }
-
-  @override
-  int get hashCode {
-    return Object.hash(
-      id,
-      name,
-      type,
-      Object.hashAll(credentials.entries.map((e) => Object.hash(e.key, e.value))),
-      createdAt,
-      lastRefreshed,
-      expirationDate,
-      accountStatus,
+  Configuration copyWith({
+    String? name,
+    ConfigType? type,
+    Map<String, dynamic>? credentials,
+    DateTime? updatedAt,
+    int? orderIndex,
+    DateTime? lastRefreshed,
+    DateTime? expirationDate,
+    String? accountStatus,
+  }) {
+    return Configuration(
+      id: id,
+      name: name ?? this.name,
+      type: type ?? this.type,
+      credentials: credentials ?? this.credentials,
+      createdAt: createdAt,
+      updatedAt: updatedAt ?? this.updatedAt,
+      orderIndex: orderIndex ?? this.orderIndex,
+      lastRefreshed: lastRefreshed ?? this.lastRefreshed,
+      expirationDate: expirationDate ?? this.expirationDate,
+      accountStatus: accountStatus ?? this.accountStatus,
     );
-  }
-
-  bool _mapEquals(Map<String, dynamic> a, Map<String, dynamic> b) {
-    if (a.length != b.length) return false;
-    for (var key in a.keys) {
-      if (!b.containsKey(key) || a[key] != b[key]) return false;
-    }
-    return true;
   }
 }

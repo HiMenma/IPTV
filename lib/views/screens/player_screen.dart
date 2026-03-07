@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:chewie/chewie.dart';
 import '../../viewmodels/player_viewmodel.dart';
@@ -94,7 +95,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
     return Container(
       color: Colors.black.withOpacity(0.8),
       child: Center(
-        child: Padding(
+        child: SingleChildScrollView(
           padding: const EdgeInsets.all(24.0),
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -112,15 +113,35 @@ class _PlayerScreenState extends State<PlayerScreen> {
                 style: const TextStyle(color: Colors.white70),
               ),
               const SizedBox(height: 24),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.center,
+              
+              // Action Buttons
+              Wrap(
+                alignment: WrapAlignment.center,
+                spacing: 12,
+                runSpacing: 12,
                 children: [
                   ElevatedButton.icon(
                     onPressed: () => viewModel.playChannel(widget.channel),
                     icon: const Icon(Icons.refresh),
                     label: const Text('Retry'),
                   ),
-                  const SizedBox(width: 16),
+                  
+                  // NEW: Copy Link Button
+                  FilledButton.icon(
+                    onPressed: () {
+                      Clipboard.setData(ClipboardData(text: widget.channel.streamUrl));
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('Link copied to clipboard'))
+                      );
+                    },
+                    icon: const Icon(Icons.copy),
+                    label: const Text('Copy URL'),
+                    style: FilledButton.styleFrom(
+                      backgroundColor: Colors.white24,
+                      foregroundColor: Colors.white,
+                    ),
+                  ),
+                  
                   OutlinedButton.icon(
                     onPressed: () => Navigator.pop(context),
                     icon: const Icon(Icons.arrow_back),
@@ -131,6 +152,13 @@ class _PlayerScreenState extends State<PlayerScreen> {
                     ),
                   ),
                 ],
+              ),
+              
+              const SizedBox(height: 16),
+              Text(
+                'Tip: If this format is unsupported, try an external player like IINA or VLC.',
+                style: TextStyle(color: Colors.white.withOpacity(0.5), fontSize: 12),
+                textAlign: TextAlign.center,
               ),
             ],
           ),

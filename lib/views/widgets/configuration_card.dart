@@ -1,10 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 import '../../models/configuration.dart';
 
-/// A reusable card widget for displaying configuration information
-/// with action buttons for edit, delete, and refresh operations.
-///
-/// Requirements: 4.2, 4.3, 2.4, 3.6
 class ConfigurationCard extends StatelessWidget {
   final Configuration configuration;
   final VoidCallback onTap;
@@ -24,180 +21,181 @@ class ConfigurationCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Card(
-      margin: const EdgeInsets.symmetric(vertical: 4, horizontal: 8),
-      child: ListTile(
-        leading: Icon(
-          _getIconForType(configuration.type),
-          size: 40,
-          color: Theme.of(context).colorScheme.primary,
-        ),
-        title: Text(
-          configuration.name,
-          style: const TextStyle(fontWeight: FontWeight.bold),
-        ),
-        subtitle: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(_getTypeLabel(configuration.type)),
-            if (configuration.lastRefreshed != null)
-              Text(
-                'Updated: ${_formatDate(configuration.lastRefreshed!)}',
-                style: const TextStyle(fontSize: 12),
-              ),
-            if (configuration.type == ConfigType.xtream && configuration.expirationDate != null)
-              Text(
-                'Expires: ${_formatExpirationDate(configuration.expirationDate!)}',
-                style: TextStyle(
-                  fontSize: 12,
-                  color: _getExpirationColor(context, configuration.expirationDate!),
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
-            if (configuration.type == ConfigType.xtream && configuration.accountStatus != null)
+      elevation: 2,
+      margin: const EdgeInsets.symmetric(vertical: 6),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(12),
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
               Row(
                 children: [
-                  Icon(
-                    configuration.accountStatus?.toLowerCase() == 'active'
-                        ? Icons.check_circle
-                        : Icons.error,
-                    size: 14,
-                    color: configuration.accountStatus?.toLowerCase() == 'active'
-                        ? Colors.green
-                        : Colors.red,
+                  _buildTypeIcon(context),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          configuration.name,
+                          style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                                fontWeight: FontWeight.bold,
+                              ),
+                        ),
+                        const SizedBox(height: 4),
+                        if (configuration.lastRefreshed != null)
+                          Text(
+                            'Updated: ${_formatDate(configuration.lastRefreshed!)}',
+                            style: Theme.of(context).textTheme.bodySmall,
+                          ),
+                      ],
+                    ),
                   ),
-                  const SizedBox(width: 4),
-                  Text(
-                    configuration.accountStatus!,
-                    style: TextStyle(
-                      fontSize: 12,
+                  if (configuration.type == ConfigType.xtream && configuration.expirationDate != null)
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: _getExpirationColor(context, configuration.expirationDate!)
+                            .withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Text(
+                        'Expires: ${_formatExpirationDate(configuration.expirationDate!)}',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: _getExpirationColor(context, configuration.expirationDate!),
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+              if (configuration.type == ConfigType.xtream && configuration.accountStatus != null) ...[
+                const SizedBox(height: 12),
+                Row(
+                  children: [
+                    Icon(
+                      configuration.accountStatus?.toLowerCase() == 'active'
+                          ? Icons.check_circle
+                          : Icons.error,
+                      size: 16,
                       color: configuration.accountStatus?.toLowerCase() == 'active'
                           ? Colors.green
                           : Colors.red,
                     ),
+                    const SizedBox(width: 4),
+                    Text(
+                      configuration.accountStatus!,
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: configuration.accountStatus?.toLowerCase() == 'active'
+                            ? Colors.green
+                            : Colors.red,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+              const SizedBox(height: 12),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  TextButton.icon(
+                    onPressed: onRefresh,
+                    icon: const Icon(Icons.refresh, size: 18),
+                    label: const Text('Refresh'),
+                  ),
+                  const SizedBox(width: 8),
+                  PopupMenuButton<String>(
+                    onSelected: (value) {
+                      if (value == 'edit') onEdit();
+                      if (value == 'delete') onDelete();
+                    },
+                    itemBuilder: (context) => [
+                      const PopupMenuItem(
+                        value: 'edit',
+                        child: Row(
+                          children: [
+                            Icon(Icons.edit, size: 20),
+                            SizedBox(width: 8),
+                            Text('Edit'),
+                          ],
+                        ),
+                      ),
+                      const PopupMenuItem(
+                        value: 'delete',
+                        child: Row(
+                          children: [
+                            Icon(Icons.delete, size: 20, color: Colors.red),
+                            SizedBox(width: 8),
+                            Text('Delete', style: TextStyle(color: Colors.red)),
+                          ],
+                        ),
+                      ),
+                    ],
+                    child: const Padding(
+                      padding: EdgeInsets.all(8.0),
+                      child: Icon(Icons.more_vert),
+                    ),
                   ),
                 ],
               ),
-          ],
+            ],
+          ),
         ),
-        trailing: PopupMenuButton<String>(
-          onSelected: (value) {
-            switch (value) {
-              case 'edit':
-                onEdit();
-                break;
-              case 'refresh':
-                onRefresh();
-                break;
-              case 'delete':
-                onDelete();
-                break;
-            }
-          },
-          itemBuilder: (context) => [
-            const PopupMenuItem(
-              value: 'edit',
-              child: Row(
-                children: [
-                  Icon(Icons.edit),
-                  SizedBox(width: 8),
-                  Text('Edit'),
-                ],
-              ),
-            ),
-            if (configuration.type != ConfigType.m3uLocal)
-              const PopupMenuItem(
-                value: 'refresh',
-                child: Row(
-                  children: [
-                    Icon(Icons.refresh),
-                    SizedBox(width: 8),
-                    Text('Refresh'),
-                  ],
-                ),
-              ),
-            PopupMenuItem(
-              value: 'delete',
-              child: Builder(
-                builder: (context) => Row(
-                  children: [
-                    Icon(Icons.delete, color: Theme.of(context).colorScheme.error),
-                    const SizedBox(width: 8),
-                    Text('Delete', style: TextStyle(color: Theme.of(context).colorScheme.error)),
-                  ],
-                ),
-              ),
-            ),
-          ],
-        ),
-        onTap: onTap,
       ),
     );
   }
 
-  IconData _getIconForType(ConfigType type) {
-    switch (type) {
-      case ConfigType.xtream:
-        return Icons.cloud;
-      case ConfigType.m3uNetwork:
-        return Icons.link;
-      case ConfigType.m3uLocal:
-        return Icons.folder;
-    }
-  }
+  Widget _buildTypeIcon(BuildContext context) {
+    IconData icon;
+    Color color;
 
-  String _getTypeLabel(ConfigType type) {
-    switch (type) {
+    switch (configuration.type) {
       case ConfigType.xtream:
-        return 'Xtream Codes';
+        icon = Icons.dns;
+        color = Colors.purple;
+        break;
       case ConfigType.m3uNetwork:
-        return 'M3U Network';
+        icon = Icons.link;
+        color = Colors.blue;
+        break;
       case ConfigType.m3uLocal:
-        return 'M3U Local';
+        icon = Icons.folder;
+        color = Colors.orange;
+        break;
+      case ConfigType.directLink:
+        icon = Icons.play_circle;
+        color = Colors.green;
+        break;
     }
+
+    return Container(
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.1),
+        shape: BoxShape.circle,
+      ),
+      child: Icon(icon, color: color),
+    );
   }
 
   String _formatDate(DateTime date) {
-    final now = DateTime.now();
-    final difference = now.difference(date);
-
-    if (difference.inMinutes < 1) {
-      return 'Just now';
-    } else if (difference.inHours < 1) {
-      return '${difference.inMinutes}m ago';
-    } else if (difference.inDays < 1) {
-      return '${difference.inHours}h ago';
-    } else {
-      return '${difference.inDays}d ago';
-    }
+    return DateFormat('MMM d, h:mm a').format(date);
   }
 
   String _formatExpirationDate(DateTime date) {
-    final now = DateTime.now();
-    final difference = date.difference(now);
-
-    if (difference.isNegative) {
-      return 'Expired';
-    } else if (difference.inDays < 1) {
-      return 'Today';
-    } else if (difference.inDays < 7) {
-      return 'in ${difference.inDays}d';
-    } else if (difference.inDays < 30) {
-      return 'in ${(difference.inDays / 7).floor()}w';
-    } else {
-      return 'in ${(difference.inDays / 30).floor()}mo';
-    }
+    return DateFormat('yyyy-MM-dd').format(date);
   }
 
-  Color _getExpirationColor(BuildContext context, DateTime expirationDate) {
-    final now = DateTime.now();
-    final difference = expirationDate.difference(now);
-
-    if (difference.isNegative) {
-      return Theme.of(context).colorScheme.error;
-    } else if (difference.inDays < 7) {
-      return Colors.orange;
-    } else {
-      return Colors.green;
-    }
+  Color _getExpirationColor(BuildContext context, DateTime expiration) {
+    final daysLeft = expiration.difference(DateTime.now()).inDays;
+    if (daysLeft < 7) return Colors.red;
+    if (daysLeft < 30) return Colors.orange;
+    return Colors.green;
   }
 }

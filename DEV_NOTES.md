@@ -34,36 +34,38 @@
 
 ### **2.2 彻底解决 macOS “渲染死锁” (关键修复)**
 *   **现象**：macOS 下部分源加载 20-30 秒无任何反应，最终超时。
-*   **病因 (The Paradox)**：底层引擎（AVFoundation/VLC）需要先有原生 Surface（即 Flutter 的 Widget）才能开始探测流；而原 UI 逻辑是“探测成功才渲染 Widget”。
 *   **修复**：**UI 预渲染策略**。在 `PlayerScreen` 中，一旦 Controller 创建，立即将播放组件放入 Widget 树，确保原生渲染表面（Texture）第一时间建立。
 
 ### **2.3 macOS 1ms 时长 Bug**
-*   **根因**：AVFoundation 对直播流误报 1ms 时长，导致播放器瞬间触发“播放结束”。
 *   **修复**：**虚假时长屏蔽**。屏蔽 10s 以内的“完成”状态判定，确保直播流不会误杀。
 
 ---
 
-## 3. 多平台兼容性补丁 (Compatibility)
+## 3. 数据库深度加固与自愈 (Database v3)
 
-### **3.1 跨平台数据库条件导入 (Conditional Import)**
-*   **痛点**：Web 专属包 `sqflite_common_ffi_web` 会导致 macOS 编译失败。
-*   **对策**：通过 `db_stub.dart` 和 `db_web.dart` 实现条件导出，完美隔离 Web 与 Native 代码。
+### **3.1 架构升级与迁移**
+*   **变更**：新增 `order_index`（排序）、`last_refreshed`、`expiration_date`、`account_status`（Xtream 状态）字段。
+*   **对策**：将数据库版本升至 **v3**，并实现 `onUpgrade` 逻辑。
 
-### **3.2 macOS HTTP 权限放开**
-*   **设置**：在 `Info.plist` 中配置 `NSAllowsArbitraryLoads` 及其子项，确保非加密流可访问。
-
----
-
-## 4. UI 交互优化
-
-*   **按钮位移**：将“添加配置”按钮从右下角 FloatingActionButton 移动至 `AppBar` 右上角。解决在列表项较多或窗口较小时遮挡内容的问题。
+### **3.2 数据库自愈逻辑 (Self-Healing)**
+*   **痛点**：Android/macOS 覆盖安装时，若 `onUpgrade` 因非预期状态失败，会导致 SQL “Column not found” 崩溃。
+*   **对策**：在 `DatabaseHelper` 中增加 **`_ensureSchemaConsistency`** 检查。应用启动时自动对比 `PRAGMA table_info`，发现缺列则动态执行 `ALTER TABLE` 补齐。
 
 ---
 
-## 5. 后续开发建议 (Roadmap)
+## 4. 专业级功能增强 (Features)
 
-1.  **连接预取 (Low)**：在列表点击时预初始化 Controller。
-2.  **错误自动重连 (Med)**：在 `PlayerViewModel` 中加入指数退避的重试逻辑。
+*   **首页拖拽排序**：采用 `ReorderableListView`，支持物理排序持久化。
+*   **单链接直接播放 (Direct Link)**：新增配置类型，支持不经过 M3U 解析直接开播单个 URL。
+*   **频道多选导出**：支持在频道列表中长按开启多选，一键导出为标准 M3U 文本或文件。
+*   **错误页快捷功能**：播放失败时提供 “Copy URL” 按钮，极大方便用户切换至外部播放器（如 IINA/VLC）。
+
+---
+
+## 5. 跨平台兼容性补丁
+
+*   **条件导入方案**：通过 `db_stub.dart` 和 `db_web.dart` 完美隔离了 Web 专属的 SQLite WASM 包，解决了 Native 端编译路径冲突。
+*   **macOS HTTP 权限**：全面放开 ATS 限制，支持 `NSAllowsArbitraryLoadsInWebContent`。
 
 ---
 **Last Updated**: 2026-03-07

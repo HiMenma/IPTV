@@ -1,137 +1,141 @@
-import 'dart:convert';
-import 'package:shared_preferences/shared_preferences.dart';
+import 'package:sqflite/sqflite.dart';
+import 'package:flutter/foundation.dart';
 import '../models/configuration.dart';
+import '../database/database_helper.dart';
+import '../utils/app_logger.dart';
 
+/// Repository for managing IPTV configurations in SQLite
 class ConfigurationRepository {
-  static const String _storageKey = 'configurations';
-  static const String _backupKey = 'configurations_backup';
+  final DatabaseHelper _dbHelper;
 
-  /// Get all configurations from storage
-  /// Requirements: 4.4
+  ConfigurationRepository({DatabaseHelper? dbHelper})
+      : _dbHelper = dbHelper ?? DatabaseHelper.instance;
+
+  /// Get all configurations sorted by order_index
   Future<List<Configuration>> getAll() async {
     try {
-      final prefs = await SharedPreferences.getInstance();
-      final jsonString = prefs.getString(_storageKey);
-      
-      if (jsonString == null) {
-        return [];
-      }
+      final db = await _dbHelper.database;
+      final List<Map<String, dynamic>> maps = await db.query(
+        'configurations',
+        orderBy: 'order_index ASC, created_at DESC',
+      );
 
+      return List.generate(maps.length, (i) {
+        return Configuration.fromMap(maps[i]);
+      });
+    } catch (e) {
+      AppLogger.log('Error getting configurations: $e');
+      // If order_index fails, try without it as fallback to at least show data
       try {
-        final Map<String, dynamic> data = json.decode(jsonString);
-        final List<dynamic> configList = data['configurations'] ?? [];
-        return configList
-            .map((item) => Configuration.fromJson(item as Map<String, dynamic>))
-            .toList();
-      } on FormatException catch (e) {
-        // Corrupted data - try to restore from backup
-        print('Configuration data corrupted: $e. Attempting to restore from backup.');
-        return await _restoreFromBackup(prefs);
-      } catch (e) {
-        // Other parsing errors - try backup
-        print('Error parsing configurations: $e. Attempting to restore from backup.');
-        return await _restoreFromBackup(prefs);
-      }
-    } catch (e) {
-      print('Error accessing storage: $e');
-      return [];
-    }
-  }
-
-  /// Restore configurations from backup
-  Future<List<Configuration>> _restoreFromBackup(SharedPreferences prefs) async {
-    try {
-      final backupString = prefs.getString(_backupKey);
-      
-      if (backupString == null) {
-        print('No backup available. Returning empty list.');
+        final db = await _dbHelper.database;
+        final List<Map<String, dynamic>> maps = await db.query(
+          'configurations',
+          orderBy: 'created_at DESC',
+        );
+        return List.generate(maps.length, (i) {
+          return Configuration.fromMap(maps[i]);
+        });
+      } catch (e2) {
+        AppLogger.log('Fallback Error getting configurations: $e2');
         return [];
       }
-
-      final Map<String, dynamic> data = json.decode(backupString);
-      final List<dynamic> configList = data['configurations'] ?? [];
-      final configurations = configList
-          .map((item) => Configuration.fromJson(item as Map<String, dynamic>))
-          .toList();
-      
-      // Restore the main storage from backup
-      await prefs.setString(_storageKey, backupString);
-      print('Successfully restored ${configurations.length} configurations from backup.');
-      
-      return configurations;
-    } catch (e) {
-      print('Failed to restore from backup: $e. Returning empty list.');
-      // Clear corrupted data and start fresh
-      await prefs.remove(_storageKey);
-      await prefs.remove(_backupKey);
-      return [];
     }
   }
 
+  /// Get a configuration by ID
   Future<Configuration?> getById(String id) async {
-    final configurations = await getAll();
     try {
-      return configurations.firstWhere((config) => config.id == id);
+      final db = await _dbHelper.database;
+      final List<Map<String, dynamic>> maps = await db.query(
+        'configurations',
+        where: 'id = ?',
+        whereArgs: [id],
+      );
+
+      if (maps.isNotEmpty) {
+        return Configuration.fromMap(maps.first);
+      }
+      return null;
     } catch (e) {
+      AppLogger.log('Error getting configuration by ID: $e');
       return null;
     }
   }
 
-  Future<void> save(Configuration config) async {
-    final configurations = await getAll();
-    configurations.add(config);
-    await _saveAll(configurations);
-  }
+  /// Add a new configuration
+  Future<void> add(Configuration config) async {
+    try {
+      final db = await _dbHelper.database;
+      
+      // Get the current max order index
+      final List<Map<String, dynamic>> result = await db.rawQuery('SELECT MAX(order_index) as max_index FROM configurations');
+      int nextIndex = 0;
+      if (result.isNotEmpty && result.first['max_index'] != null) {
+        nextIndex = (result.first['max_index'] as int) + 1;
+      }
 
-  Future<void> update(Configuration config) async {
-    final configurations = await getAll();
-    final index = configurations.indexWhere((c) => c.id == config.id);
-    
-    if (index != -1) {
-      configurations[index] = config;
-      await _saveAll(configurations);
+      final configWithIndex = config.copyWith(orderIndex: nextIndex);
+
+      await db.insert(
+        'configurations',
+        configWithIndex.toMap(),
+        conflictAlgorithm: ConflictAlgorithm.replace,
+      );
+    } catch (e) {
+      AppLogger.log('Error adding configuration: $e');
+      rethrow;
     }
   }
 
-  Future<void> delete(String id) async {
-    final configurations = await getAll();
-    configurations.removeWhere((config) => config.id == id);
-    await _saveAll(configurations);
+  /// Update an existing configuration
+  Future<void> update(Configuration config) async {
+    try {
+      final db = await _dbHelper.database;
+      await db.update(
+        'configurations',
+        config.toMap(),
+        where: 'id = ?',
+        whereArgs: [config.id],
+      );
+    } catch (e) {
+      AppLogger.log('Error updating configuration: $e');
+      rethrow;
+    }
   }
 
-  /// Save all configurations to storage with backup
-  /// Requirements: 4.4
-  Future<void> _saveAll(List<Configuration> configurations) async {
+  /// Delete a configuration
+  Future<void> delete(String id) async {
     try {
-      final prefs = await SharedPreferences.getInstance();
-      final data = {
-        'configurations': configurations.map((c) => c.toJson()).toList(),
-      };
-      final jsonString = json.encode(data);
+      final db = await _dbHelper.database;
+      await db.delete(
+        'configurations',
+        where: 'id = ?',
+        whereArgs: [id],
+      );
+    } catch (e) {
+      AppLogger.log('Error deleting configuration: $e');
+      rethrow;
+    }
+  }
+
+  /// Update the order index of multiple configurations
+  Future<void> updateOrder(List<Configuration> configs) async {
+    try {
+      final db = await _dbHelper.database;
+      final batch = db.batch();
       
-      // Create backup of current data before overwriting
-      final currentData = prefs.getString(_storageKey);
-      if (currentData != null) {
-        try {
-          await prefs.setString(_backupKey, currentData);
-        } catch (e) {
-          print('Warning: Failed to create backup: $e');
-          // Continue with save even if backup fails
-        }
+      for (int i = 0; i < configs.length; i++) {
+        batch.update(
+          'configurations',
+          {'order_index': i},
+          where: 'id = ?',
+          whereArgs: [configs[i].id],
+        );
       }
       
-      // Save new data
-      final success = await prefs.setString(_storageKey, jsonString);
-      
-      if (!success) {
-        throw Exception('Failed to save configurations. Storage may be full.');
-      }
-    } on Exception catch (e) {
-      // Check if it's a disk full error
-      if (e.toString().contains('full') || e.toString().contains('space')) {
-        throw Exception('Storage is full. Please free up space and try again.');
-      }
-      throw Exception('Failed to save configurations: $e');
+      await batch.commit(noResult: true);
+    } catch (e) {
+      AppLogger.log('Error updating configurations order: $e');
     }
   }
 }

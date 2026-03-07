@@ -84,12 +84,17 @@ class _HomeScreenState extends State<HomeScreen> {
             );
           }
 
-          return ListView.builder(
+          // Use ReorderableListView for drag-and-drop support
+          return ReorderableListView.builder(
             padding: const EdgeInsets.all(8),
             itemCount: viewModel.configurations.length,
+            onReorder: (oldIndex, newIndex) {
+              viewModel.reorderConfigurations(oldIndex, newIndex);
+            },
             itemBuilder: (context, index) {
               final config = viewModel.configurations[index];
               return ConfigurationCard(
+                key: ValueKey(config.id), // Key is required for reordering
                 configuration: config,
                 onTap: () => _navigateToChannelList(context, config),
                 onEdit: () => _navigateToEditConfiguration(context, config),
