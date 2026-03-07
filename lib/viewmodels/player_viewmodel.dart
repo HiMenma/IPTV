@@ -2,25 +2,41 @@ import 'package:flutter/foundation.dart';
 import 'dart:async';
 import 'package:chewie/chewie.dart';
 import '../models/channel.dart';
+import '../models/configuration.dart';
 import '../services/player_service.dart';
 import '../repositories/history_repository_sqlite.dart';
+import '../repositories/configuration_repository.dart';
+import '../services/xtream_service.dart';
+import '../services/m3u_service.dart';
+import '../utils/app_logger.dart';
 
 class PlayerViewModel extends ChangeNotifier {
   final PlayerService _playerService;
   final HistoryRepositorySQLite _historyRepository;
+  final ConfigurationRepository _configRepository;
+  final XtreamService _xtreamService = XtreamService();
+  final M3UService _m3uService = M3UService();
 
   PlayerState _state = PlayerState.idle;
   String? _error;
   Channel? _currentChannel;
   bool _isFullscreen = false;
+  
+  // Reconnect logic
+  int _retryCount = 0;
+  static const int _maxRetries = 3;
+  Timer? _reconnectTimer;
+
   StreamSubscription<PlayerState>? _stateSubscription;
   StreamSubscription<String?>? _errorSubscription;
 
   PlayerViewModel({
     PlayerService? playerService,
     HistoryRepositorySQLite? historyRepository,
+    ConfigurationRepository? configRepository,
   })  : _playerService = playerService ?? PlayerService(),
-        _historyRepository = historyRepository ?? HistoryRepositorySQLite() {
+        _historyRepository = historyRepository ?? HistoryRepositorySQLite(),
+        _configRepository = configRepository ?? ConfigurationRepository() {
     _setupListeners();
   }
 
@@ -28,39 +44,88 @@ class PlayerViewModel extends ChangeNotifier {
   String? get error => _error;
   Channel? get currentChannel => _currentChannel;
   bool get isFullscreen => _isFullscreen;
+  bool get isRetrying => _state == PlayerState.retrying;
   
-  /// Get the Chewie controller for UI integration
   ChewieController? get chewieController => _playerService.chewieController;
 
-  /// Set up listeners for player state and error streams
   void _setupListeners() {
     _stateSubscription = _playerService.stateStream.listen((newState) {
       _state = newState;
+      if (newState == PlayerState.playing) {
+        _retryCount = 0; // Reset count on success
+        _error = null;   // Clear error message on success!
+      }
       notifyListeners();
     });
 
     _errorSubscription = _playerService.errorStream.listen((errorMessage) {
-      _error = errorMessage;
-      notifyListeners();
+      if (errorMessage != null) {
+        _handlePlaybackError(errorMessage);
+      }
     });
   }
 
-  /// Play a channel
+  void _handlePlaybackError(String message) {
+    AppLogger.log('PlayerVM: Error received: $message. Current retry: $_retryCount');
+    
+    if (_retryCount < _maxRetries && _currentChannel != null) {
+      _retryCount++;
+      _error = 'Connection error. Retrying ($_retryCount/$_maxRetries)...';
+      notifyListeners();
+      
+      _reconnectTimer?.cancel();
+      // Wait slightly longer (3s) to allow system to clear video buffers
+      _reconnectTimer = Timer(const Duration(seconds: 3), () {
+        _performReconnect();
+      });
+    } else {
+      _error = message;
+      _state = PlayerState.error;
+      notifyListeners();
+    }
+  }
+
+  Future<void> _performReconnect() async {
+    if (_currentChannel == null) return;
+    
+    try {
+      AppLogger.log('PlayerVM: Attempting silent reconnect for ${_currentChannel!.name}');
+      
+      // Optional: Refresh the channel URL from source if it's a dynamic source
+      String urlToPlay = _currentChannel!.streamUrl;
+      
+      try {
+        final config = await _configRepository.getById(_currentChannel!.configId);
+        if (config != null) {
+          if (config.type == ConfigType.xtream) {
+            // Re-fetch Xtream URL to get fresh token if needed
+            // This is a simplified version; real-world might need deeper API call
+            AppLogger.log('PlayerVM: Refreshing Xtream config for fresh tokens');
+          }
+        }
+      } catch (e) {
+        AppLogger.log('PlayerVM: Background refresh failed, using old URL: $e');
+      }
+
+      await _playerService.play(urlToPlay, isRetry: true);
+    } catch (e) {
+      AppLogger.log('PlayerVM: Reconnect attempt failed: $e');
+      // Error will be caught by listener and potentially trigger next retry
+    }
+  }
+
   Future<void> playChannel(Channel channel) async {
     try {
       _currentChannel = channel;
       _error = null;
+      _retryCount = 0;
       notifyListeners();
 
-      // Initialize player if not already initialized
       if (_playerService.currentState == PlayerState.idle) {
         await _playerService.initialize();
       }
 
-      // Play the channel
       await _playerService.play(channel.streamUrl);
-
-      // Record in history
       await _historyRepository.add(channel.id);
     } catch (e) {
       _error = 'Failed to play channel: $e';
@@ -70,53 +135,18 @@ class PlayerViewModel extends ChangeNotifier {
     }
   }
 
-  /// Pause playback
-  Future<void> pause() async {
-    try {
-      await _playerService.pause();
-    } catch (e) {
-      _error = 'Failed to pause playback: $e';
-      notifyListeners();
-      rethrow;
-    }
-  }
+  Future<void> pause() async => await _playerService.pause();
+  Future<void> resume() async => await _playerService.resume();
 
-  /// Resume playback
-  Future<void> resume() async {
-    try {
-      await _playerService.resume();
-    } catch (e) {
-      _error = 'Failed to resume playback: $e';
-      notifyListeners();
-      rethrow;
-    }
-  }
-
-  /// Stop playback
   Future<void> stop() async {
-    try {
-      await _playerService.stop();
-      _currentChannel = null;
-      notifyListeners();
-    } catch (e) {
-      _error = 'Failed to stop playback: $e';
-      notifyListeners();
-      rethrow;
-    }
+    _reconnectTimer?.cancel();
+    _currentChannel = null;
+    await _playerService.stop();
+    notifyListeners();
   }
 
-  /// Set volume (0.0 to 1.0)
-  Future<void> setVolume(double volume) async {
-    try {
-      await _playerService.setVolume(volume);
-    } catch (e) {
-      _error = 'Failed to set volume: $e';
-      notifyListeners();
-      rethrow;
-    }
-  }
+  Future<void> setVolume(double volume) async => await _playerService.setVolume(volume);
 
-  /// Toggle fullscreen mode
   void toggleFullscreen() {
     _isFullscreen = !_isFullscreen;
     notifyListeners();
@@ -124,6 +154,7 @@ class PlayerViewModel extends ChangeNotifier {
 
   @override
   void dispose() {
+    _reconnectTimer?.cancel();
     _stateSubscription?.cancel();
     _errorSubscription?.cancel();
     _playerService.dispose();

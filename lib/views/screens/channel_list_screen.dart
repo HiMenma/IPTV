@@ -1,10 +1,15 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
-import '../../viewmodels/channel_viewmodel.dart';
-import '../../viewmodels/configuration_viewmodel.dart';
+import 'dart:io';
+import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:path_provider/path_provider.dart';
 import '../../models/configuration.dart';
 import '../../models/channel.dart';
-import '../widgets/channel_item.dart';
+import '../../viewmodels/channel_viewmodel.dart';
+import '../../services/m3u_service.dart';
+import '../widgets/channel_list_item.dart';
+import '../widgets/channel_grid_item.dart';
 import 'player_screen.dart';
 
 class ChannelListScreen extends StatefulWidget {
@@ -17,17 +22,23 @@ class ChannelListScreen extends StatefulWidget {
 }
 
 class _ChannelListScreenState extends State<ChannelListScreen> {
-  final _searchController = TextEditingController();
+  final TextEditingController _searchController = TextEditingController();
   String _searchQuery = '';
   String? _selectedCategory;
+  
+  // Selection mode state
+  bool _isSelectionMode = false;
+  final Set<String> _selectedChannelIds = {};
+
+  // View mode state
+  bool _isGridView = false;
 
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      // Load channels (will use cache if available)
-      context.read<ChannelViewModel>().loadChannels(widget.configuration.id, forceRefresh: false);
-    });
+    Future.microtask(
+      () => context.read<ChannelViewModel>().loadChannels(widget.configuration.id),
+    );
   }
 
   @override
@@ -38,329 +49,260 @@ class _ChannelListScreenState extends State<ChannelListScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: Text(widget.configuration.name),
-        backgroundColor: Theme.of(context).colorScheme.inversePrimary,
-        actions: [
-          // Refresh button for network configurations
-          if (widget.configuration.type != ConfigType.m3uLocal)
-            IconButton(
-              icon: const Icon(Icons.refresh),
-              onPressed: _refreshConfiguration,
-              tooltip: 'Refresh',
-            ),
-          // Export button for Xtream configurations
-          if (widget.configuration.type == ConfigType.xtream)
-            IconButton(
-              icon: const Icon(Icons.download),
-              onPressed: _exportToM3U,
-              tooltip: 'Export to M3U',
-            ),
-        ],
-      ),
-      body: Consumer<ChannelViewModel>(
-        builder: (context, viewModel, child) {
-          if (viewModel.isLoading) {
-            return const Center(child: CircularProgressIndicator());
-          }
+    return Consumer<ChannelViewModel>(
+      builder: (context, viewModel, child) {
+        final filteredChannels = _getFilteredChannels(viewModel.channels);
+        final categories = _getCategories(viewModel.channels);
 
-          if (viewModel.error != null) {
-            return Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(Icons.error_outline, size: 48, color: Theme.of(context).colorScheme.error),
-                  const SizedBox(height: 16),
-                  Text(
-                    viewModel.error!,
-                    textAlign: TextAlign.center,
-                    style: TextStyle(color: Theme.of(context).colorScheme.error),
-                  ),
-                  const SizedBox(height: 16),
-                  ElevatedButton(
-                    onPressed: () => viewModel.loadChannels(widget.configuration.id),
-                    child: const Text('Retry'),
-                  ),
-                ],
-              ),
-            );
-          }
-
-          if (viewModel.channels.isEmpty) {
-            return Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(Icons.tv_off, size: 64, color: Theme.of(context).colorScheme.onSurfaceVariant),
-                  const SizedBox(height: 16),
-                  Text(
-                    'No channels found',
-                    style: TextStyle(fontSize: 18, color: Theme.of(context).colorScheme.onSurfaceVariant),
-                  ),
-                ],
-              ),
-            );
-          }
-
-          final filteredChannels = _filterChannels(viewModel.channels);
-          final categories = _getCategories(viewModel.channels);
-
-          return Column(
+        return Scaffold(
+          appBar: AppBar(
+            title: _isSelectionMode 
+              ? Text('${_selectedChannelIds.length} Selected')
+              : Text(widget.configuration.name),
+            leading: _isSelectionMode 
+              ? IconButton(
+                  icon: const Icon(Icons.close),
+                  onPressed: () => setState(() {
+                    _isSelectionMode = false;
+                    _selectedChannelIds.clear();
+                  }),
+                )
+              : null,
+            actions: [
+              if (_isSelectionMode) ...[
+                IconButton(
+                  icon: const Icon(Icons.select_all),
+                  onPressed: () => setState(() {
+                    if (_selectedChannelIds.length == filteredChannels.length) {
+                      _selectedChannelIds.clear();
+                    } else {
+                      _selectedChannelIds.addAll(filteredChannels.map((c) => c.id));
+                    }
+                  }),
+                ),
+                IconButton(
+                  icon: const Icon(Icons.download),
+                  tooltip: 'Export to M3U',
+                  onPressed: _selectedChannelIds.isEmpty ? null : () => _exportSelected(filteredChannels),
+                ),
+              ] else ...[
+                IconButton(
+                  icon: Icon(_isGridView ? Icons.view_list : Icons.grid_view),
+                  tooltip: _isGridView ? 'List View' : 'Grid View',
+                  onPressed: () => setState(() => _isGridView = !_isGridView),
+                ),
+                IconButton(
+                  icon: const Icon(Icons.refresh),
+                  onPressed: () => viewModel.loadChannels(widget.configuration.id, forceRefresh: true),
+                ),
+              ],
+            ],
+          ),
+          body: Column(
             children: [
-              // Search bar
-              Padding(
-                padding: const EdgeInsets.all(8.0),
-                child: TextField(
-                  controller: _searchController,
-                  decoration: InputDecoration(
-                    hintText: 'Search channels...',
-                    prefixIcon: const Icon(Icons.search),
-                    suffixIcon: _searchQuery.isNotEmpty
-                        ? IconButton(
-                            icon: const Icon(Icons.clear),
-                            onPressed: () {
-                              setState(() {
-                                _searchController.clear();
-                                _searchQuery = '';
-                              });
-                            },
-                          )
-                        : null,
-                    border: const OutlineInputBorder(),
-                  ),
-                  onChanged: (value) {
-                    setState(() {
-                      _searchQuery = value.toLowerCase();
-                    });
-                  },
-                ),
-              ),
-
-              // Category filter
-              if (categories.isNotEmpty)
-                SizedBox(
-                  height: 50,
-                  child: ListView(
-                    scrollDirection: Axis.horizontal,
-                    padding: const EdgeInsets.symmetric(horizontal: 8),
-                    children: [
-                      Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 4),
-                        child: FilterChip(
-                          label: const Text('All'),
-                          selected: _selectedCategory == null,
-                          onSelected: (selected) {
-                            setState(() {
-                              _selectedCategory = null;
-                            });
-                          },
-                        ),
-                      ),
-                      ...categories.map((category) => Padding(
-                            padding: const EdgeInsets.symmetric(horizontal: 4),
-                            child: FilterChip(
-                              label: Text(category),
-                              selected: _selectedCategory == category,
-                              onSelected: (selected) {
-                                setState(() {
-                                  _selectedCategory = selected ? category : null;
-                                });
-                              },
-                            ),
-                          )),
-                    ],
-                  ),
-                ),
-
-              // Channel list
+              if (!_isSelectionMode) _buildSearchAndFilter(categories),
               Expanded(
-                child: filteredChannels.isEmpty
-                    ? Center(
-                        child: Text(
-                          'No channels match your search',
-                          style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant),
-                        ),
-                      )
-                    : ListView.builder(
-                        itemCount: filteredChannels.length,
-                        // Add explicit item extent for better performance
-                        itemExtent: 80.0,
-                        // Enable caching for better scrolling performance
-                        cacheExtent: 500.0,
-                        itemBuilder: (context, index) {
-                          final channel = filteredChannels[index];
-                          return Consumer<ChannelViewModel>(
-                            builder: (context, channelViewModel, child) {
-                              final isFavorite = channelViewModel.isFavorite(channel.id);
-                              return ChannelItem(
-                                key: ValueKey(channel.id),
-                                channel: channel,
-                                onTap: () => _playChannel(context, channel),
-                                isFavorite: isFavorite,
-                                onToggleFavorite: () => _toggleFavorite(context, channel),
-                                showFavoriteButton: true,
-                              );
-                            },
-                          );
-                        },
-                      ),
+                child: _buildChannelContainer(viewModel, filteredChannels),
               ),
             ],
-          );
-        },
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildSearchAndFilter(List<String> categories) {
+    return Padding(
+      padding: const EdgeInsets.all(8.0),
+      child: Column(
+        children: [
+          TextField(
+            controller: _searchController,
+            decoration: InputDecoration(
+              hintText: 'Search channels...',
+              prefixIcon: const Icon(Icons.search),
+              suffixIcon: _searchQuery.isNotEmpty
+                  ? IconButton(
+                      icon: const Icon(Icons.clear),
+                      onPressed: () {
+                        _searchController.clear();
+                        setState(() => _searchQuery = '');
+                      },
+                    )
+                  : null,
+              border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+            ),
+            onChanged: (value) => setState(() => _searchQuery = value),
+          ),
+          if (categories.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            SizedBox(
+              height: 40,
+              child: ListView.builder(
+                scrollDirection: Axis.horizontal,
+                itemCount: categories.length + 1,
+                itemBuilder: (context, index) {
+                  final category = index == 0 ? null : categories[index - 1];
+                  final isSelected = _selectedCategory == category;
+                  return Padding(
+                    padding: const EdgeInsets.only(right: 8),
+                    child: FilterChip(
+                      label: Text(category ?? 'All'),
+                      selected: isSelected,
+                      onSelected: (selected) {
+                        setState(() => _selectedCategory = selected ? category : null);
+                      },
+                    ),
+                  );
+                },
+              ),
+            ),
+          ],
+        ],
       ),
     );
   }
 
-  List<Channel> _filterChannels(List<Channel> channels) {
-    var filtered = channels;
+  Widget _buildChannelContainer(ChannelViewModel viewModel, List<Channel> channels) {
+    if (viewModel.isLoading) return const Center(child: CircularProgressIndicator());
+    if (viewModel.error != null) return Center(child: Text(viewModel.error!, style: const TextStyle(color: Colors.red)));
+    if (channels.isEmpty) return const Center(child: Text('No channels found'));
 
-    // Filter by search query
-    if (_searchQuery.isNotEmpty) {
-      filtered = filtered
-          .where((channel) => channel.name.toLowerCase().contains(_searchQuery))
-          .toList();
+    if (_isGridView) {
+      return GridView.builder(
+        padding: const EdgeInsets.all(12),
+        gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+          maxCrossAxisExtent: 150,
+          childAspectRatio: 0.8,
+          crossAxisSpacing: 12,
+          mainAxisSpacing: 12,
+        ),
+        itemCount: channels.length,
+        itemBuilder: (context, index) {
+          final channel = channels[index];
+          final isSelected = _selectedChannelIds.contains(channel.id);
+          return ChannelGridItem(
+            channel: channel,
+            isFavorite: viewModel.isFavorite(channel.id),
+            isSelected: _isSelectionMode ? isSelected : false,
+            onTap: () {
+              if (_isSelectionMode) {
+                _toggleSelection(channel.id);
+              } else {
+                _navigateToPlayer(context, channel);
+              }
+            },
+            onLongPress: () {
+              if (!_isSelectionMode) {
+                setState(() {
+                  _isSelectionMode = true;
+                  _selectedChannelIds.add(channel.id);
+                });
+              }
+            },
+            onFavoriteToggle: () => viewModel.toggleFavorite(channel.id),
+          );
+        },
+      );
     }
 
-    // Filter by category
-    if (_selectedCategory != null) {
-      filtered = filtered
-          .where((channel) => channel.category == _selectedCategory)
-          .toList();
-    }
+    return ListView.builder(
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      itemCount: channels.length,
+      itemBuilder: (context, index) {
+        final channel = channels[index];
+        final isSelected = _selectedChannelIds.contains(channel.id);
 
-    return filtered;
+        return ChannelListItem(
+          channel: channel,
+          isFavorite: viewModel.isFavorite(channel.id),
+          isSelected: _isSelectionMode ? isSelected : false,
+          onTap: () {
+            if (_isSelectionMode) {
+              _toggleSelection(channel.id);
+            } else {
+              _navigateToPlayer(context, channel);
+            }
+          },
+          onLongPress: () {
+            if (!_isSelectionMode) {
+              setState(() {
+                _isSelectionMode = true;
+                _selectedChannelIds.add(channel.id);
+              });
+            }
+          },
+          onFavoriteToggle: () => viewModel.toggleFavorite(channel.id),
+        );
+      },
+    );
   }
 
-  List<String> _getCategories(List<Channel> channels) {
-    final categories = channels
-        .where((channel) => channel.category != null && channel.category!.isNotEmpty)
-        .map((channel) => channel.category!)
+  void _toggleSelection(String id) {
+    setState(() {
+      if (_selectedChannelIds.contains(id)) {
+        _selectedChannelIds.remove(id);
+        if (_selectedChannelIds.isEmpty) _isSelectionMode = false;
+      } else {
+        _selectedChannelIds.add(id);
+      }
+    });
+  }
+
+  List<Channel> _getFilteredChannels(List<Channel> allChannels) {
+    return allChannels.where((channel) {
+      final matchesSearch = channel.name.toLowerCase().contains(_searchQuery.toLowerCase());
+      final matchesCategory = _selectedCategory == null || channel.category == _selectedCategory;
+      return matchesSearch && matchesCategory;
+    }).toList();
+  }
+
+  List<String> _getCategories(List<Channel> allChannels) {
+    final categories = allChannels
+        .map((c) => c.category)
+        .where((cat) => cat != null && cat.isNotEmpty)
+        .cast<String>()
         .toSet()
         .toList();
     categories.sort();
     return categories;
   }
 
-  void _playChannel(BuildContext context, Channel channel) {
+  void _navigateToPlayer(BuildContext context, Channel channel) {
     Navigator.push(
       context,
-      MaterialPageRoute(
-        builder: (context) => PlayerScreen(channel: channel),
-      ),
+      MaterialPageRoute(builder: (context) => PlayerScreen(channel: channel)),
     );
   }
 
-  Future<void> _toggleFavorite(BuildContext context, Channel channel) async {
-    try {
-      final viewModel = context.read<ChannelViewModel>();
-      final wasFavorite = viewModel.isFavorite(channel.id);
-      
-      await viewModel.toggleFavorite(channel.id);
-      
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              wasFavorite 
-                ? 'Removed "${channel.name}" from favorites'
-                : 'Added "${channel.name}" to favorites'
-            ),
-            duration: const Duration(seconds: 2),
-          ),
-        );
-      }
-    } catch (e) {
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Failed to update favorite: $e'),
-            backgroundColor: Theme.of(context).colorScheme.error,
-          ),
-        );
-      }
-    }
-  }
+  Future<void> _exportSelected(List<Channel> allFiltered) async {
+    final selectedChannels = allFiltered.where((c) => _selectedChannelIds.contains(c.id)).toList();
+    if (selectedChannels.isEmpty) return;
 
-  Future<void> _refreshConfiguration() async {
-    if (!mounted) return;
-    
-    final configViewModel = context.read<ConfigurationViewModel>();
-    final channelViewModel = context.read<ChannelViewModel>();
-    final messenger = ScaffoldMessenger.of(context);
+    final m3uContent = M3UService().exportToM3U(selectedChannels);
     
     try {
-      await configViewModel.refreshConfiguration(widget.configuration.id);
-      
-      if (mounted) {
-        // Force refresh to reload from source and update cache
-        await channelViewModel.loadChannels(widget.configuration.id, forceRefresh: true);
+      if (kIsWeb) {
+        await Clipboard.setData(ClipboardData(text: m3uContent));
+        if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('M3U content copied to clipboard (Web)')));
+      } else {
+        final directory = await getTemporaryDirectory();
+        final file = File('${directory.path}/exported_channels.m3u');
+        await file.writeAsString(m3uContent);
         
-        messenger.showSnackBar(
-          const SnackBar(content: Text('Configuration refreshed from source')),
-        );
+        await Clipboard.setData(ClipboardData(text: m3uContent));
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Exported ${selectedChannels.length} channels. Content copied to clipboard.'))
+          );
+        }
       }
+      setState(() {
+        _isSelectionMode = false;
+        _selectedChannelIds.clear();
+      });
     } catch (e) {
-      if (mounted) {
-        messenger.showSnackBar(
-          SnackBar(
-            content: Text('Failed to refresh: $e'),
-            backgroundColor: Theme.of(context).colorScheme.error,
-          ),
-        );
-      }
-    }
-  }
-
-  Future<void> _exportToM3U() async {
-    try {
-      final m3uContent = await context
-          .read<ConfigurationViewModel>()
-          .exportToM3U(widget.configuration.id);
-
-      if (mounted) {
-        // Show dialog to save file
-        final fileName = '${widget.configuration.name.replaceAll(' ', '_')}.m3u';
-        
-        showDialog(
-          context: context,
-          builder: (context) => AlertDialog(
-            title: const Text('Export to M3U'),
-            content: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text('File: $fileName'),
-                const SizedBox(height: 8),
-                const Text('M3U content has been generated.'),
-                const SizedBox(height: 16),
-                Text(
-                  'Content preview:\n${m3uContent.substring(0, m3uContent.length > 200 ? 200 : m3uContent.length)}...',
-                  style: const TextStyle(fontSize: 12, fontFamily: 'monospace'),
-                ),
-              ],
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(context),
-                child: const Text('Close'),
-              ),
-            ],
-          ),
-        );
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Failed to export: $e'),
-            backgroundColor: Theme.of(context).colorScheme.error,
-          ),
-        );
-      }
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Export failed: $e')));
     }
   }
 }
-
-

@@ -99,6 +99,19 @@ class ChannelViewModel extends ChangeNotifier {
           final filePath = config.credentials['filePath'] as String;
           _channels = await _m3uService.parseLocalFile(filePath, config.id);
           break;
+
+        case ConfigType.directLink:
+          final url = config.credentials['url'] as String;
+          _channels = [
+            Channel(
+              id: config.id, // Use config ID as channel ID for unique reference
+              name: config.name,
+              streamUrl: url,
+              configId: config.id,
+              category: 'Direct Link',
+            )
+          ];
+          break;
       }
       
       // Save to cache
