@@ -14,7 +14,7 @@
 *   **效果**：即使导入 50,000+ 频道，应用依然保持 120fps 流畅。
 
 ### **1.2 数据库查询优化 (SQLite)**
-*   **痛点**：收藏夹和历史记录加载采用“内存全量过滤”，随数据量增加性能呈线性下降。
+*   **痛点**：收藏夹 and 历史记录加载采用“内存全量过滤”，随数据量增加性能呈线性下降。
 *   **对策**：
     *   **索引增强**：为 `channel_id` 增加数据库索引。
     *   **SQL 批量查询**：实现 `getChannelsByIds` 方法，将检索复杂度从 O(N) 降低到 O(log N)。
@@ -38,6 +38,13 @@
 
 ### **2.3 macOS 1ms 时长 Bug**
 *   **修复**：**虚假时长屏蔽**。屏蔽 10s 以内的“完成”状态判定，确保直播流不会误杀。
+
+### **2.4 播放自愈看门狗 (Auto-Reconnect)**
+*   **痛点**：视频播放一段时间后无故中断（Token 过期或服务端换源轮转）。
+*   **修复**：
+    *   **Stall 检测**：在 `PlayerService` 中增加 8 秒停顿监测，超时即触发错误。
+    *   **静默重连**：`PlayerViewModel` 捕获异常后自动执行最多 3 次静默重连（间隔 2s）。
+    *   **UI 反馈**：增加橙色 HUD 提示用户“正在自动恢复连接”。
 
 ---
 
@@ -66,6 +73,9 @@
 
 *   **条件导入方案**：通过 `db_stub.dart` 和 `db_web.dart` 完美隔离了 Web 专属的 SQLite WASM 包，解决了 Native 端编译路径冲突。
 *   **macOS HTTP 权限**：全面放开 ATS 限制，支持 `NSAllowsArbitraryLoadsInWebContent`。
+*   **Android 防止熄屏 (Wakelock Fix)**：
+    *   **权限补全**：在 `AndroidManifest.xml` 中显式添加 `WAKE_LOCK` 权限（针对部分省电机型）。
+    *   **逻辑同步**：由于新版 `Chewie` 移除了内置锁参数，现统一由 `PlayerService` 显式维护 `WakelockPlus` 状态。
 
 ---
 **Last Updated**: 2026-03-07

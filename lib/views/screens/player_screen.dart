@@ -72,11 +72,18 @@ class _PlayerScreenState extends State<PlayerScreen> {
           Center(
             child: _buildPlayerWidget(viewModel),
           ),
-          // Loading Indicator
+          
+          // Initial Loading
           if (viewModel.state == PlayerState.preparing || viewModel.state == PlayerState.idle)
             const Center(child: CircularProgressIndicator(color: Colors.white)),
-          // Error overlay
-          if (viewModel.error != null) _buildErrorOverlay(viewModel),
+          
+          // Auto-reconnect HUD
+          if (viewModel.isRetrying)
+            _buildReconnectOverlay(viewModel),
+
+          // Error overlay (only if not currently retrying)
+          if (viewModel.error != null && !viewModel.isRetrying) 
+            _buildErrorOverlay(viewModel),
         ],
       ),
     );
@@ -84,11 +91,29 @@ class _PlayerScreenState extends State<PlayerScreen> {
 
   Widget _buildPlayerWidget(PlayerViewModel viewModel) {
     if (viewModel.chewieController != null && 
-        (viewModel.state == PlayerState.playing || viewModel.state == PlayerState.paused)) {
+        (viewModel.state == PlayerState.playing || viewModel.state == PlayerState.paused || viewModel.state == PlayerState.retrying)) {
       return Chewie(controller: viewModel.chewieController!);
     }
-    
     return const SizedBox.shrink();
+  }
+
+  Widget _buildReconnectOverlay(PlayerViewModel viewModel) {
+    return Container(
+      color: Colors.black45,
+      child: Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const CircularProgressIndicator(color: Colors.orange),
+            const SizedBox(height: 16),
+            Text(
+              viewModel.error ?? 'Reconnecting...',
+              style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   Widget _buildErrorOverlay(PlayerViewModel viewModel) {
@@ -114,7 +139,6 @@ class _PlayerScreenState extends State<PlayerScreen> {
               ),
               const SizedBox(height: 24),
               
-              // Action Buttons
               Wrap(
                 alignment: WrapAlignment.center,
                 spacing: 12,
@@ -123,10 +147,8 @@ class _PlayerScreenState extends State<PlayerScreen> {
                   ElevatedButton.icon(
                     onPressed: () => viewModel.playChannel(widget.channel),
                     icon: const Icon(Icons.refresh),
-                    label: const Text('Retry'),
+                    label: const Text('Retry Now'),
                   ),
-                  
-                  // NEW: Copy Link Button
                   FilledButton.icon(
                     onPressed: () {
                       Clipboard.setData(ClipboardData(text: widget.channel.streamUrl));
@@ -141,7 +163,6 @@ class _PlayerScreenState extends State<PlayerScreen> {
                       foregroundColor: Colors.white,
                     ),
                   ),
-                  
                   OutlinedButton.icon(
                     onPressed: () => Navigator.pop(context),
                     icon: const Icon(Icons.arrow_back),
@@ -152,13 +173,6 @@ class _PlayerScreenState extends State<PlayerScreen> {
                     ),
                   ),
                 ],
-              ),
-              
-              const SizedBox(height: 16),
-              Text(
-                'Tip: If this format is unsupported, try an external player like IINA or VLC.',
-                style: TextStyle(color: Colors.white.withOpacity(0.5), fontSize: 12),
-                textAlign: TextAlign.center,
               ),
             ],
           ),
