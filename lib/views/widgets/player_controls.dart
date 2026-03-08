@@ -2,10 +2,6 @@ import 'package:flutter/material.dart';
 import '../../services/player_service.dart';
 
 /// A reusable widget for displaying video player controls.
-/// Includes play/pause button, volume slider, fullscreen toggle,
-/// and optional progress bar.
-///
-/// Requirements: 5.5
 class PlayerControls extends StatelessWidget {
   final PlayerState playerState;
   final bool isFullscreen;
@@ -49,11 +45,8 @@ class PlayerControls extends StatelessWidget {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          // Top controls
           _buildTopControls(),
-          // Center controls
           _buildCenterControls(),
-          // Bottom controls
           _buildBottomControls(),
         ],
       ),
@@ -67,10 +60,7 @@ class PlayerControls extends StatelessWidget {
         mainAxisAlignment: MainAxisAlignment.end,
         children: [
           IconButton(
-            icon: Icon(
-              isFullscreen ? Icons.fullscreen_exit : Icons.fullscreen,
-              color: Colors.white,
-            ),
+            icon: Icon(isFullscreen ? Icons.fullscreen_exit : Icons.fullscreen, color: Colors.white),
             onPressed: onToggleFullscreen,
             tooltip: isFullscreen ? 'Exit fullscreen' : 'Enter fullscreen',
           ),
@@ -83,25 +73,18 @@ class PlayerControls extends StatelessWidget {
     return Row(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
-        // Previous button
         IconButton(
           icon: const Icon(Icons.skip_previous, color: Colors.white, size: 40),
           onPressed: onPrevious,
           tooltip: 'Previous',
         ),
         const SizedBox(width: 24),
-        // Play/Pause button
         IconButton(
-          icon: Icon(
-            _getPlayPauseIcon(),
-            color: Colors.white,
-            size: 64,
-          ),
+          icon: Icon(_getPlayPauseIcon(), color: Colors.white, size: 64),
           onPressed: _canPlayPause() ? onPlayPause : null,
           tooltip: _getPlayPauseTooltip(),
         ),
         const SizedBox(width: 24),
-        // Next button
         IconButton(
           icon: const Icon(Icons.skip_next, color: Colors.white, size: 40),
           onPressed: onNext,
@@ -115,7 +98,6 @@ class PlayerControls extends StatelessWidget {
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        // Progress bar (if applicable)
         if (showProgressBar && progress != null)
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16.0),
@@ -125,15 +107,11 @@ class PlayerControls extends StatelessWidget {
               valueColor: const AlwaysStoppedAnimation<Color>(Colors.white),
             ),
           ),
-        // Volume controls
         Padding(
           padding: const EdgeInsets.all(16.0),
           child: Row(
             children: [
-              Icon(
-                _getVolumeIcon(),
-                color: Colors.white,
-              ),
+              Icon(_getVolumeIcon(), color: Colors.white),
               Expanded(
                 child: Slider(
                   value: volume,
@@ -157,12 +135,11 @@ class PlayerControls extends StatelessWidget {
         return Icons.pause_circle_filled;
       case PlayerState.paused:
         return Icons.play_circle_filled;
+      case PlayerState.retrying:
       case PlayerState.preparing:
       case PlayerState.prepared:
         return Icons.hourglass_empty;
-      case PlayerState.idle:
-      case PlayerState.stopped:
-      case PlayerState.error:
+      default:
         return Icons.play_circle_filled;
     }
   }
@@ -173,12 +150,12 @@ class PlayerControls extends StatelessWidget {
         return 'Pause';
       case PlayerState.paused:
         return 'Resume';
+      case PlayerState.retrying:
+        return 'Retrying...';
       case PlayerState.preparing:
       case PlayerState.prepared:
         return 'Loading...';
-      case PlayerState.idle:
-      case PlayerState.stopped:
-      case PlayerState.error:
+      default:
         return 'Play';
     }
   }
@@ -188,12 +165,8 @@ class PlayerControls extends StatelessWidget {
   }
 
   IconData _getVolumeIcon() {
-    if (volume == 0) {
-      return Icons.volume_off;
-    } else if (volume < 0.5) {
-      return Icons.volume_down;
-    } else {
-      return Icons.volume_up;
-    }
+    if (volume == 0) return Icons.volume_off;
+    if (volume < 0.5) return Icons.volume_down;
+    return Icons.volume_up;
   }
 }
