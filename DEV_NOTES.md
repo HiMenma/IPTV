@@ -1,4 +1,4 @@
-# 📺 IPTV Player 开发与技术审计总结 (2026-03-07)
+# 📺 IPTV Player 开发与技术审计总结 (2026-03-09)
 
 本文档记录了项目在性能优化、播放稳定性修复及多平台构建过程中的关键技术决策与填坑记录。
 
@@ -8,69 +8,57 @@
 
 ### **1.1 M3U/Xtream 海量数据解析**
 *   **痛点**：解析数万行 M3U 文件导致主线程掉帧（UI 卡死）。
-*   **对策**：
-    *   **Isolate 并行化**：通过 `compute` 将解析压力移至后台线程。
-    *   **正则优化**：预编译正则表达式，减少重复编译开销。
+*   **对策**：使用 Isolate 并行化处理解析压力。
 *   **效果**：即使导入 50,000+ 频道，应用依然保持 120fps 流畅。
 
 ### **1.2 数据库查询优化 (SQLite)**
-*   **痛点**：收藏夹 and 历史记录加载采用“内存全量过滤”，随数据量增加性能呈线性下降。
-*   **对策**：
-    *   **索引增强**：为 `channel_id` 增加数据库索引。
-    *   **SQL 批量查询**：实现 `getChannelsByIds` 方法，将检索复杂度从 O(N) 降低到 O(log N)。
-*   **效果**：海量数据下的收藏页实现“秒开”。
+*   **痛点**：收藏夹和历史记录加载采用“内存全量过滤”，性能随数据量增加线性下降。
+*   **对策**：增加索引并实现 SQL 批量查询。
 
 ---
 
 ## 2. 播放稳定性与渲染深度加固 (Stability)
 
-### **2.1 播放引擎架构博弈 (VLC vs. VideoPlayer)**
-*   **实验记录**：曾尝试迁移至 `flutter_vlc_player` 以追求更高兼容性，但在 macOS 上遭遇了严重的“静默挂起”问题。
-*   **结论**：在 Flutter macOS 架构下，VLC 插件的 Texture 绑定稳定性不如官方推荐的 `video_player`。最终决定回退至 **Official Engine + 自研补丁** 方案。
-
-### **2.2 彻底解决 macOS “渲染死锁” (关键修复)**
-*   **现象**：macOS 下部分源加载 20-30 秒无任何反应，最终超时。
+### **2.1 彻底解决 macOS “渲染死锁”**
+*   **现象**：macOS 下部分源加载 20-30 秒无任何反应。
 *   **修复**：**UI 预渲染策略**。在 `PlayerScreen` 中，一旦 Controller 创建，立即将播放组件放入 Widget 树，确保原生渲染表面（Texture）第一时间建立。
 
-### **2.3 播放自愈看门狗 (Auto-Reconnect)**
-*   **痛点**：视频播放一段时间后无故中断。
-*   **修复**：
-    *   **Stall 检测**：在 `PlayerService` 中增加停顿监测，超时即触发错误。
-    *   **静默重连**：`PlayerViewModel` 捕获异常后自动执行最多 3 次静默重连。
-
-### **2.4 UI 变更对播放稳定性的冲击 (Lessons Learned)**
-*   **教训**：在追求“纯净 UI”（如拦截全屏手势、禁用原生控制台）时，过度干预了 `Chewie` 的内部生命周期，导致 macOS 端的纹理绑定（Texture Binding）发生死锁，诱发 `error -12939`。
-*   **对策**：**回归原生控制台稳定性**。恢复 `showControls: true`，确保播放器初始化链路的完整性。
+### **2.2 播放自愈看门狗 (Auto-Reconnect)**
+*   **功能**：在 `PlayerService` 中增加 15 秒停顿监测，超时自动重连。
 
 ---
 
-## 3. 导航鲁棒性与逃生通道 (UX Robustness)
+## 3. 数据库架构升级与自愈补丁 (Database Hardening)
 
-### **3.1 防止 UI “死锁”**
-*   **痛点**：播放报错时，全屏覆盖层挡住了所有交互，且 TopBar 被隐藏，导致用户无法返回主页。
-*   **修复**：
-    *   **AppBar 常驻**：将 `AppBar` 移出 `Stack` 的条件判断，确保左上角返回键在任何报错状态下始终可见。
-    *   **显式按钮**：在 `ErrorOverlay` 中强制加入【Retry】和【Back Home】按钮。
+### **3.1 幽灵表名与跨平台同步 Bug [2026-03-09]**
+*   **现象**：同样的安装包，macOS 正常运行而 Android 在播放时报 SQL 错误。
+*   **病因**：
+    *   **代码冲突**：`HistoryRepository` 使用 `history` 表，而 `DatabaseHelper` 误创建为 `browse_history`。
+    *   **环境差异**：macOS 存在旧版遗留的物理 DB 文件，其中的表名恰好匹配 Repository，掩盖了代码 Bug；Android 因经常卸载重装（干净安装）导致 Bug 立即爆发。
+*   **教训**：不可依赖 `_onCreate` 进行版本管理，新旧用户环境差异是跨平台开发的巨大隐患。
 
----
-
-## 4. 核心功能扩展 (New Features)
-
-### **4.1 本地 M3U 文件导入**
-*   **实现**：集成 `file_picker` 插件，支持 `ConfigType.m3uLocal`。
-*   **优势**：支持手机/电脑本地离线播放列表，解决了部分服务器防火墙屏蔽 URL 请求的问题。
-
-### **4.2 手动主题管理 (Theme Persistence)**
-*   **实现**：增加 `ThemeProvider`，支持 `Light` / `Dark` / `System` 三态切换。
-*   **持久化**：使用 `shared_preferences` 存储用户偏好，确保 App 重启后主题状态一致。
+### **3.2 终极自愈逻辑 (Self-Healing Strategy)**
+*   **方案**：在 `DatabaseHelper` 中引入 **`_ensureSchemaConsistency`**。
+*   **实现**：不信任版本号，启动时通过 `PRAGMA table_info` 强行扫描物理表结构。
+*   **自愈内容**：
+    1.  检测 `history` 表是否存在，缺失则自动补建。
+    2.  检测 `favorites` 字段，若为旧版 `created_at` 自动重命名为 `added_at`。
+    3.  动态执行 `ALTER TABLE` 补齐 `configurations` 表缺失的 Xtream 扩展字段。
 
 ---
 
-## 5. 跨平台兼容性补丁
+## 4. 导航鲁棒性与逃生通道 (UX)
 
-*   **Android 防止熄屏 (Wakelock Fix)**：在 `AndroidManifest.xml` 中添加 `WAKE_LOCK` 权限，并显式维护锁状态。
-*   **数据库自愈 (Self-Healing)**：启动时自动扫描并补全缺失的 SQL 字段（如 `order_index`），防止覆盖安装导致的崩溃。
+*   **防止 UI “死锁”**：播放报错时，确保 AppBar（含返回按钮）始终处于最顶层且可点击。
+*   **显式操作**：在 Error Overlay 中加入显式的【Retry】和【Back Home】按钮。
 
 ---
-**Last Updated**: 2026-03-07
+
+## 5. 跨平台补丁集
+
+*   **Android 防止熄屏**：添加 `WAKE_LOCK` 权限并手动同步锁状态。
+*   **Web 模块移除**：为了追求极致 Native 性能，项目已剥离所有 Web 相关冗余代码。
+
+---
+**Last Updated**: 2026-03-09
 **Author**: Gemini OmG Team

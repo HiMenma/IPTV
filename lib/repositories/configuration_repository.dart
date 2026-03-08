@@ -2,7 +2,6 @@ import 'package:sqflite/sqflite.dart';
 import 'package:flutter/foundation.dart';
 import '../models/configuration.dart';
 import '../database/database_helper.dart';
-import '../utils/app_logger.dart';
 
 /// Repository for managing IPTV configurations in SQLite
 class ConfigurationRepository {
@@ -24,21 +23,8 @@ class ConfigurationRepository {
         return Configuration.fromMap(maps[i]);
       });
     } catch (e) {
-      AppLogger.log('Error getting configurations: $e');
-      // If order_index fails, try without it as fallback to at least show data
-      try {
-        final db = await _dbHelper.database;
-        final List<Map<String, dynamic>> maps = await db.query(
-          'configurations',
-          orderBy: 'created_at DESC',
-        );
-        return List.generate(maps.length, (i) {
-          return Configuration.fromMap(maps[i]);
-        });
-      } catch (e2) {
-        AppLogger.log('Fallback Error getting configurations: $e2');
-        return [];
-      }
+      debugPrint('Error getting configurations: $e');
+      return [];
     }
   }
 
@@ -57,7 +43,7 @@ class ConfigurationRepository {
       }
       return null;
     } catch (e) {
-      AppLogger.log('Error getting configuration by ID: $e');
+      debugPrint('Error getting configuration by ID: $e');
       return null;
     }
   }
@@ -67,7 +53,6 @@ class ConfigurationRepository {
     try {
       final db = await _dbHelper.database;
       
-      // Get the current max order index
       final List<Map<String, dynamic>> result = await db.rawQuery('SELECT MAX(order_index) as max_index FROM configurations');
       int nextIndex = 0;
       if (result.isNotEmpty && result.first['max_index'] != null) {
@@ -82,7 +67,7 @@ class ConfigurationRepository {
         conflictAlgorithm: ConflictAlgorithm.replace,
       );
     } catch (e) {
-      AppLogger.log('Error adding configuration: $e');
+      debugPrint('Error adding configuration: $e');
       rethrow;
     }
   }
@@ -98,7 +83,7 @@ class ConfigurationRepository {
         whereArgs: [config.id],
       );
     } catch (e) {
-      AppLogger.log('Error updating configuration: $e');
+      debugPrint('Error updating configuration: $e');
       rethrow;
     }
   }
@@ -113,7 +98,7 @@ class ConfigurationRepository {
         whereArgs: [id],
       );
     } catch (e) {
-      AppLogger.log('Error deleting configuration: $e');
+      debugPrint('Error deleting configuration: $e');
       rethrow;
     }
   }
@@ -135,7 +120,7 @@ class ConfigurationRepository {
       
       await batch.commit(noResult: true);
     } catch (e) {
-      AppLogger.log('Error updating configurations order: $e');
+      debugPrint('Error updating configurations order: $e');
     }
   }
 }
