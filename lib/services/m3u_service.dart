@@ -5,7 +5,6 @@ import 'package:uuid/uuid.dart';
 import '../models/channel.dart';
 import '../utils/error_handler.dart';
 
-/// Helper class for isolate parsing
 class _M3UParseParams {
   final String content;
   final String configId;
@@ -31,7 +30,6 @@ class M3UService {
       : _dio = dio ?? Dio(),
         _uuid = uuid ?? const Uuid();
 
-  /// Parse a local M3U/M3U8 file and extract channels
   Future<List<Channel>> parseLocalFile(String filePath, String configId, {bool forceRefresh = false}) async {
     final cacheKey = 'local:$filePath:$configId';
     if (!forceRefresh && _isCacheValid(cacheKey)) {
@@ -56,7 +54,6 @@ class M3UService {
     }
   }
 
-  /// Fetch and parse a remote M3U/M3U8 file
   Future<List<Channel>> parseNetworkFile(String url, String configId, {bool forceRefresh = false}) async {
     final cacheKey = 'network:$url:$configId';
     if (!forceRefresh && _isCacheValid(cacheKey)) {
@@ -80,7 +77,6 @@ class M3UService {
     });
   }
 
-  /// Top-level function for compute()
   static List<Channel> _parseM3UIsolate(_M3UParseParams params) {
     const uuid = Uuid();
     // Namespace for UUID v5 generation (random but constant)
@@ -132,7 +128,6 @@ class M3UService {
   }
 
 
-  /// Export a list of channels to M3U format
   String exportToM3U(List<Channel> channels) {
     final buffer = StringBuffer();
     buffer.writeln('#EXTM3U');
@@ -164,12 +159,10 @@ class M3UService {
     return buffer.toString();
   }
 
-  /// Escape special characters in attribute values
   String _escapeAttribute(String value) {
     return value.replaceAll('"', '&quot;').replaceAll('\n', ' ').replaceAll('\r', '');
   }
   
-  /// Check if cache is valid for a given key
   bool _isCacheValid(String key) {
     if (!_cache.containsKey(key)) {
       return false;
@@ -184,19 +177,16 @@ class M3UService {
     return now.difference(timestamp) < _cacheDuration;
   }
   
-  /// Update cache with new data
   void _updateCache(String key, List<Channel> channels) {
     _cache[key] = channels;
     _cacheTimestamps[key] = DateTime.now();
   }
   
-  /// Clear cache for a specific key
   void clearCache(String key) {
     _cache.remove(key);
     _cacheTimestamps.remove(key);
   }
   
-  /// Clear all cache
   void clearAllCache() {
     _cache.clear();
     _cacheTimestamps.clear();

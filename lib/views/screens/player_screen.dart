@@ -31,7 +31,11 @@ class _PlayerScreenState extends State<PlayerScreen> {
 
   @override
   void dispose() {
-    try { _playerViewModel?.stop(); } catch (e) {}
+    try {
+      _playerViewModel?.stop();
+    } catch (_) {
+      // Ignore stop errors during dispose
+    }
     super.dispose();
   }
 

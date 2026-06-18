@@ -45,8 +45,6 @@ class ChannelViewModel extends ChangeNotifier {
   bool get isLoading => _isLoading;
   String? get error => _error;
 
-  /// Load channels from a specific configuration
-  /// Uses cache if available, otherwise loads from source
   Future<void> loadChannels(String configId, {bool forceRefresh = false}) async {
     _isLoading = true;
     _error = null;
@@ -130,7 +128,6 @@ class ChannelViewModel extends ChangeNotifier {
     }
   }
 
-  /// Load favorite IDs into memory for quick lookup
   Future<void> _loadFavoriteIds() async {
     try {
       final favoriteRecords = await _favoriteRepository.getAll();
@@ -140,7 +137,6 @@ class ChannelViewModel extends ChangeNotifier {
     }
   }
 
-  /// Load favorite channels
   Future<void> loadFavorites() async {
     _isLoading = true;
     _error = null;
@@ -169,7 +165,6 @@ class ChannelViewModel extends ChangeNotifier {
     }
   }
 
-  /// Load browse history
   Future<void> loadHistory() async {
     _isLoading = true;
     _error = null;
@@ -207,12 +202,10 @@ class ChannelViewModel extends ChangeNotifier {
   }
 
 
-  /// Check if a channel is favorited (synchronous, uses cached data)
   bool isFavorite(String channelId) {
     return _favoriteIds.contains(channelId);
   }
 
-  /// Toggle favorite status of a channel
   Future<void> toggleFavorite(String channelId) async {
     try {
       final wasFavorite = _favoriteIds.contains(channelId);
@@ -241,7 +234,6 @@ class ChannelViewModel extends ChangeNotifier {
     }
   }
 
-  /// Clear all browse history
   Future<void> clearHistory() async {
     try {
       await _historyRepository.clear();

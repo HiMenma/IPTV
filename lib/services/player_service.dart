@@ -59,7 +59,7 @@ class PlayerService {
         isLive: true, 
         allowFullScreen: true,
         allowMuting: true,
-        showControls: true, // REVERT: Restore native controls for stability
+        showControls: true,
         autoInitialize: true,
         placeholder: Container(color: Colors.black),
         aspectRatio: (_videoController!.value.aspectRatio > 0) 
@@ -76,7 +76,11 @@ class PlayerService {
         }
       }
 
-      try { await WakelockPlus.enable(); } catch (e) {}
+      try {
+        await WakelockPlus.enable();
+      } catch (_) {
+        // Wakelock not available on this platform
+      }
       _updateState(PlayerState.playing);
     } catch (e) {
       _updateState(PlayerState.error);
@@ -135,7 +139,11 @@ class PlayerService {
     _stopStallTimer();
     await _disposeControllers();
     _updateState(PlayerState.stopped);
-    try { await WakelockPlus.disable(); } catch (e) {}
+    try {
+      await WakelockPlus.disable();
+    } catch (_) {
+      // Wakelock not available on this platform
+    }
   }
 
   Future<void> pause() async {

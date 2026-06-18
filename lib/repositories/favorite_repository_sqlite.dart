@@ -2,11 +2,9 @@ import 'package:sqflite/sqflite.dart';
 import '../models/favorite.dart';
 import '../database/database_helper.dart';
 
-/// SQLite-based repository for managing favorites
 class FavoriteRepositorySQLite {
   final DatabaseHelper _dbHelper = DatabaseHelper.instance;
 
-  /// Get all favorites from database
   Future<List<Favorite>> getAll() async {
     try {
       final db = await _dbHelper.database;
@@ -25,7 +23,6 @@ class FavoriteRepositorySQLite {
     }
   }
 
-  /// Check if a channel is favorited
   Future<bool> isFavorite(String channelId) async {
     try {
       final db = await _dbHelper.database;
@@ -43,7 +40,6 @@ class FavoriteRepositorySQLite {
     }
   }
 
-  /// Add a channel to favorites
   Future<void> add(String channelId) async {
     try {
       final db = await _dbHelper.database;
@@ -69,7 +65,6 @@ class FavoriteRepositorySQLite {
     }
   }
 
-  /// Remove a channel from favorites
   Future<void> remove(String channelId) async {
     try {
       final db = await _dbHelper.database;
@@ -86,7 +81,6 @@ class FavoriteRepositorySQLite {
     }
   }
 
-  /// Clear all favorites
   Future<void> clear() async {
     try {
       final db = await _dbHelper.database;
@@ -98,7 +92,6 @@ class FavoriteRepositorySQLite {
     }
   }
 
-  /// Get count of favorites
   Future<int> getCount() async {
     try {
       final db = await _dbHelper.database;

@@ -25,7 +25,6 @@ class NetworkException implements Exception {
 }
 
 class ErrorHandler {
-  /// Execute an async network call with retry logic and error mapping
   static Future<T> executeWithRetry<T>(
     Future<T> Function() action, {
     int maxRetries = 3,
@@ -49,7 +48,6 @@ class ErrorHandler {
     }
   }
 
-  /// Get a user-friendly error message from any exception
   static String getUserFriendlyMessage(dynamic error) {
     if (error is NetworkException) {
       switch (error.type) {

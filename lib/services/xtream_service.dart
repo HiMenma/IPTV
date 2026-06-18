@@ -3,7 +3,6 @@ import 'package:uuid/uuid.dart';
 import '../models/channel.dart';
 import '../utils/error_handler.dart';
 
-/// Xtream account information
 class XtreamAccountInfo {
   final String username;
   final String status;
@@ -30,7 +29,6 @@ class XtreamService {
 
   XtreamService({Dio? dio}) : _dio = dio ?? Dio();
 
-  /// Get account information from Xtream server
   Future<XtreamAccountInfo> getAccountInfo(String serverUrl, String username, String password) async {
     final cacheKey = '$serverUrl:$username';
     if (_accountInfoCache.containsKey(cacheKey) && _isCacheValid(cacheKey)) {
@@ -76,7 +74,6 @@ class XtreamService {
     });
   }
 
-  /// Get all live channels from Xtream server
   Future<List<Channel>> getChannels(String serverUrl, String username, String password, String configId, {bool forceRefresh = false}) async {
     final cacheKey = 'channels:$configId';
     if (!forceRefresh && _cache.containsKey(cacheKey) && _isCacheValid(cacheKey)) {

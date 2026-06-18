@@ -2,11 +2,9 @@ import 'package:sqflite/sqflite.dart';
 import '../models/browse_history.dart';
 import '../database/database_helper.dart';
 
-/// SQLite-based repository for managing browse history
 class HistoryRepositorySQLite {
   final DatabaseHelper _dbHelper = DatabaseHelper.instance;
 
-  /// Get all history entries from database
   Future<List<BrowseHistory>> getAll() async {
     try {
       final db = await _dbHelper.database;
@@ -25,7 +23,6 @@ class HistoryRepositorySQLite {
     }
   }
 
-  /// Add a channel to history
   Future<void> add(String channelId) async {
     try {
       final db = await _dbHelper.database;
@@ -46,7 +43,6 @@ class HistoryRepositorySQLite {
     }
   }
 
-  /// Clear all history
   Future<void> clear() async {
     try {
       final db = await _dbHelper.database;
@@ -58,7 +54,6 @@ class HistoryRepositorySQLite {
     }
   }
 
-  /// Get count of history entries
   Future<int> getCount() async {
     try {
       final db = await _dbHelper.database;
@@ -70,7 +65,6 @@ class HistoryRepositorySQLite {
     }
   }
 
-  /// Remove a specific entry from history
   Future<void> remove(String channelId) async {
     try {
       final db = await _dbHelper.database;
@@ -87,7 +81,6 @@ class HistoryRepositorySQLite {
     }
   }
 
-  /// Get recent history (limit number of entries)
   Future<List<BrowseHistory>> getRecent(int limit) async {
     try {
       final db = await _dbHelper.database;

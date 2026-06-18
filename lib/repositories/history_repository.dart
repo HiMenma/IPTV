@@ -6,8 +6,6 @@ class HistoryRepository {
   static const String _storageKey = 'history';
   static const String _backupKey = 'history_backup';
 
-  /// Get all history entries from storage
-  /// Requirements: 7.2
   Future<List<BrowseHistory>> getAll() async {
     try {
       final prefs = await SharedPreferences.getInstance();
@@ -92,8 +90,6 @@ class HistoryRepository {
     await prefs.remove(_storageKey);
   }
 
-  /// Save all history entries to storage with backup
-  /// Requirements: 7.2
   Future<void> _saveAll(List<BrowseHistory> history) async {
     try {
       final prefs = await SharedPreferences.getInstance();

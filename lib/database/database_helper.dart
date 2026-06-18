@@ -35,7 +35,7 @@ class DatabaseHelper {
     );
   }
 
-  /// Self-healing: Check tables and columns consistency
+  /// Check tables and columns consistency on startup
   Future<void> _ensureSchemaConsistency(Database db) async {
     try {
       // 1. Ensure 'history' table exists (Fix for rename bug)

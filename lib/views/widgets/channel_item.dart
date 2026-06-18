@@ -2,11 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import '../../models/channel.dart';
 
-/// A reusable widget for displaying channel information in a list.
-/// Supports tap to play and long-press for options menu.
-/// Shows favorite indicator when channel is favorited.
-///
-/// Requirements: 6.1, 6.2
 class ChannelItem extends StatelessWidget {
   final Channel channel;
   final VoidCallback onTap;

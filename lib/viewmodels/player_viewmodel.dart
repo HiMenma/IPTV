@@ -99,7 +99,6 @@ class PlayerViewModel extends ChangeNotifier {
         if (config != null) {
           if (config.type == ConfigType.xtream) {
             // Re-fetch Xtream URL to get fresh token if needed
-            // This is a simplified version; real-world might need deeper API call
             AppLogger.log('PlayerVM: Refreshing Xtream config for fresh tokens');
           }
         }

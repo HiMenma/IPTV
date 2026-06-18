@@ -1,34 +1,31 @@
-# 📺 IPTV Player
+# IPTV Player
 
-A professional, high-performance IPTV player built with Flutter, focusing on stability, deep UI customization, and self-healing playback.
+A Flutter-based IPTV player focused on stability, UI customization, and reliable playback.
 
-## 🚀 Key Features
+## Features
 
-- **Multi-Source Support**: M3U Network URLs, Local M3U Files, and Xtream Codes API.
-- **Self-Healing Engine**: Integrated playback watchdog that automatically reconnects on stalls or token expiry.
-- **Native Stability**: Fine-tuned for macOS and Android with dedicated rendering optimizations.
-- **Glassmorphism UI**: Immersive, clutter-free player interface with smooth animations.
-- **Database Self-Healing**: Automated SQLite schema maintenance to prevent crashes after updates.
-- **Theme Management**: Manual toggle for Light/Dark/System modes.
+- Multi-source support: M3U network URLs, local M3U files, and Xtream Codes API
+- Playback watchdog with automatic reconnection on stalls or token expiry
+- Platform-optimized rendering for macOS and Android
+- Glassmorphism UI with smooth animations
+- SQLite schema auto-migration to prevent crashes after updates
+- Manual Light/Dark/System theme toggle
 
-## 🏗️ Technical Stack
+## Technical Stack
 
-- **Framework**: Flutter (Dart)
-- **Engine**: VideoPlayer + Chewie (Highly customized)
-- **Persistence**: SQLite (sqflite)
-- **State Management**: Provider (MVVM)
+- Framework: Flutter (Dart)
+- Video: VideoPlayer + Chewie
+- Storage: SQLite (sqflite)
+- State: Provider (MVVM)
 
-## 📑 Documentation
+## Documentation
 
-- [Project Architecture & Key Files](./ARCHITECTURE.md) - Detailed overview of the technical stack and file roles.
-- [Development Notes & Bug Fixes](./DEV_NOTES.md) - History of optimizations and platform-specific fixes.
-- [Build Guide](./BUILD_GUIDE.md) - Instructions for compiling Android and macOS apps.
+- [Architecture](./ARCHITECTURE.md)
+- [Dev Notes](./DEV_NOTES.md)
+- [Build Guide](./BUILD_GUIDE.md)
 
-## 🛠️ Getting Started
+## Getting Started
 
-1.  **Prerequisites**: Install Flutter SDK (>=3.4.0).
-2.  **Install Dependencies**: `flutter pub get`
-3.  **Run Build**: `./build_all.sh --all`
-
----
-Developed with ❤️ by Gemini OmG Team
+1. Install Flutter SDK (>=3.4.0)
+2. `flutter pub get`
+3. `./build_all.sh --all`
