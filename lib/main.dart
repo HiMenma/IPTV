@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'database/database_helper.dart';
@@ -11,15 +12,26 @@ import 'views/screens/history_screen.dart';
 import 'utils/app_logger.dart';
 
 void main() async {
-  WidgetsFlutterBinding.ensureInitialized();
-  
-  // Initialize logger
-  await AppLogger.init();
-  
-  // Initialize database factory for Web/Desktop platforms
-  DatabaseHelper.initPlatformFactory();
-  
-  runApp(const MyApp());
+  // 全局兜底：未捕获的异步异常与框架错误全部落到日志文件，避免静默崩溃
+  FlutterError.onError = (FlutterErrorDetails details) {
+    FlutterError.presentError(details);
+    AppLogger.log(
+        'FlutterError: ${details.exception}\n${details.stack ?? 'no stack'}');
+  };
+
+  runZonedGuarded<Future<void>>(() async {
+    WidgetsFlutterBinding.ensureInitialized();
+
+    // Initialize logger
+    await AppLogger.init();
+
+    // Initialize database factory for Web/Desktop platforms
+    DatabaseHelper.initPlatformFactory();
+
+    runApp(const MyApp());
+  }, (Object error, StackTrace stack) {
+    AppLogger.log('UncaughtError: $error\n$stack');
+  });
 }
 
 class MyApp extends StatelessWidget {

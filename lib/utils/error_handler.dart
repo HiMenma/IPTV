@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
+import 'log_redactor.dart';
 
 enum NetworkErrorType {
   connection,
@@ -39,15 +40,21 @@ class ErrorHandler {
           throw _mapDioError(e);
         }
         retryCount++;
-        debugPrint('Network error (Attempt $retryCount/$maxRetries): ${e.message}. Retrying in ${retryDelay.inSeconds}s...');
+        // Dio 的错误描述可能携带请求地址（含账号密码），统一脱敏后再写日志
+        debugPrint('Network error (Attempt $retryCount/$maxRetries): ${redactUrl(e.message ?? 'unknown')}. Retrying in ${retryDelay.inSeconds}s...');
         await Future.delayed(retryDelay);
       } catch (e) {
         if (e is NetworkException) rethrow;
-        throw NetworkException(e.toString(), type: NetworkErrorType.unknown);
+        // 未知异常（如 DioException）的 toString() 可能带上完整请求地址（含账号密码），脱敏后再抛出
+        throw NetworkException(redactUrl(e.toString()),
+            type: NetworkErrorType.unknown);
       }
     }
   }
 
+  /// 生成面向用户的错误提示。
+  ///
+  /// 该文本会显示在 UI 上，必须保证不含账号密码，故同样走[redactUrl] 脱敏。
   static String getUserFriendlyMessage(dynamic error) {
     if (error is NetworkException) {
       switch (error.type) {
@@ -64,7 +71,8 @@ class ErrorHandler {
         case NetworkErrorType.serverError:
           return 'Server error (HTTP ${error.statusCode}). Please try again later.';
         case NetworkErrorType.unknown:
-          return 'An unexpected network error occurred: ${error.message}';
+          // message 可能内嵌含凭证的请求地址，展示给用户前必须脱敏
+          return 'An unexpected network error occurred: ${redactUrl(error.message)}';
       }
     } else if (error is SocketException) {
       return 'Network error: Failed to connect to the server.';
@@ -76,8 +84,8 @@ class ErrorHandler {
     if (msg.contains('not correctly configured') || msg.contains('12939')) {
       return 'Server error (12939): Possible byte range or content length issue.';
     }
-    
-    return 'An error occurred: $error';
+
+    return 'An error occurred: ${redactUrl(error.toString())}';
   }
 
   static NetworkException _mapDioError(DioException e) {
@@ -101,7 +109,7 @@ class ErrorHandler {
       if (status >= 500) return NetworkException('Server Error', type: NetworkErrorType.serverError, statusCode: status);
     }
 
-    return NetworkException(message, type: NetworkErrorType.unknown);
+    return NetworkException(redactUrl(message), type: NetworkErrorType.unknown);
   }
 
   static bool _isRetryable(DioException e) {
