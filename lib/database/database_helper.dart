@@ -25,14 +25,23 @@ class DatabaseHelper {
   }
 
   Future<Database> _initDatabase() async {
-    final documentsDirectory = await getApplicationDocumentsDirectory();
-    final path = join(documentsDirectory.path, 'iptv_player.db');
+    final path = await _resolveDbPath();
     return await openDatabase(
       path,
       version: 3,
       onCreate: _onCreate,
       onUpgrade: _onUpgrade,
     );
+  }
+
+  /// 统一解析数据库文件路径。
+  ///
+  /// 历史上创建时用 [getApplicationDocumentsDirectory]，而删除/统计用
+  /// [getDatabasesPath]，二者在 Android 上指向不同目录，导致删除与体积统计
+  /// 作用在不存在的文件上。此处收敛为唯一来源。
+  static Future<String> _resolveDbPath() async {
+    final documentsDirectory = await getApplicationDocumentsDirectory();
+    return join(documentsDirectory.path, 'iptv_player.db');
   }
 
   /// Check tables and columns consistency on startup
@@ -137,20 +146,28 @@ class DatabaseHelper {
     await _ensureSchemaConsistency(db);
   }
 
+  /// 删除数据库文件。
+  ///
+  /// 必须先关闭已打开的连接，否则文件句柄被占用会导致删除失败（Windows 桌面端尤其明显）。
   Future<void> deleteDatabase() async {
-    final dbPath = await getDatabasesPath();
-    final path = join(dbPath, 'iptv_player.db');
-    if (await File(path).exists()) {
-      await File(path).delete();
+    final path = await _resolveDbPath();
+    // 先关闭连接并置空，避免下次访问时复用已失效的实例
+    if (_database != null) {
+      await _database!.close();
+      _database = null;
     }
-    _database = null;
+    final file = File(path);
+    if (await file.exists()) {
+      await file.delete();
+      AppLogger.log('Database: Deleted $path');
+    }
   }
 
   Future<int> getDatabaseSize() async {
-    final dbPath = await getDatabasesPath();
-    final path = join(dbPath, 'iptv_player.db');
-    if (await File(path).exists()) {
-      return await File(path).length();
+    final path = await _resolveDbPath();
+    final file = File(path);
+    if (await file.exists()) {
+      return await file.length();
     }
     return 0;
   }
