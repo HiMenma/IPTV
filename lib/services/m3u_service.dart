@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:uuid/uuid.dart';
 import '../models/channel.dart';
 import '../utils/error_handler.dart';
+import '../utils/app_logger.dart';
 
 class _M3UParseParams {
   final String content;
@@ -13,7 +14,6 @@ class _M3UParseParams {
 
 class M3UService {
   final Dio _dio;
-  final Uuid _uuid;
   
   // Pre-compiled RegEx patterns for performance
   static final _logoRegExp = RegExp(r'tvg-logo="([^"]*)"', caseSensitive: false);
@@ -26,9 +26,10 @@ class M3UService {
   // Cache duration: 5 minutes
   static const Duration _cacheDuration = Duration(minutes: 5);
 
+  // [uuid] 保留以兼容既有调用方；实际解析在 isolate 内使用固定的 UUID v5
+  // namespace（见 _parseM3UIsolate），因此无需在实例上持有实例字段。
   M3UService({Dio? dio, Uuid? uuid})
-      : _dio = dio ?? Dio(),
-        _uuid = uuid ?? const Uuid();
+      : _dio = dio ?? Dio();
 
   Future<List<Channel>> parseLocalFile(String filePath, String configId, {bool forceRefresh = false}) async {
     final cacheKey = 'local:$filePath:$configId';
@@ -49,7 +50,8 @@ class M3UService {
       _updateCache(cacheKey, channels);
       return channels;
     } catch (e) {
-      debugPrint('Error parsing local M3U: $e');
+      // 文件路径可能包含用户目录信息，日志中仅保留异常类型
+      AppLogger.log('M3U: local parse failed: ${e.runtimeType}');
       rethrow;
     }
   }

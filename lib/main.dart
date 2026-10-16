@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'database/database_helper.dart';
 import 'providers/theme_provider.dart';
+import 'services/xtream_service.dart';
+import 'services/m3u_service.dart';
 import 'viewmodels/configuration_viewmodel.dart';
 import 'viewmodels/channel_viewmodel.dart';
 import 'viewmodels/player_viewmodel.dart';
@@ -34,16 +36,37 @@ void main() async {
   });
 }
 
-class MyApp extends StatelessWidget {
+class MyApp extends StatefulWidget {
   const MyApp({super.key});
+
+  @override
+  State<MyApp> createState() => _MyAppState();
+}
+
+class _MyAppState extends State<MyApp> {
+  // XtreamService / M3UService 实例在多个 ViewModel 间共享，
+  // 否则「刷新配置」清掉的只是 ConfigurationViewModel 自己那份副本缓存。
+  // 放在 State 中保证 rebuild 时不会重复创建，缓存才能真正被共享与清除。
+  final XtreamService _xtreamService = XtreamService();
+  final M3UService _m3uService = M3UService();
 
   @override
   Widget build(BuildContext context) {
     return MultiProvider(
       providers: [
         ChangeNotifierProvider(create: (_) => ThemeProvider()),
-        ChangeNotifierProvider(create: (_) => ConfigurationViewModel()),
-        ChangeNotifierProvider(create: (_) => ChannelViewModel()),
+        ChangeNotifierProvider(
+          create: (_) => ConfigurationViewModel(
+            xtreamService: _xtreamService,
+            m3uService: _m3uService,
+          ),
+        ),
+        ChangeNotifierProvider(
+          create: (_) => ChannelViewModel(
+            xtreamService: _xtreamService,
+            m3uService: _m3uService,
+          ),
+        ),
         ChangeNotifierProvider(create: (_) => PlayerViewModel()),
       ],
       child: Consumer<ThemeProvider>(
