@@ -101,6 +101,9 @@ class _ChannelListScreenState extends State<ChannelListScreen> {
           body: Column(
             children: [
               if (!_isSelectionMode) _buildSearchAndFilter(categories),
+              // 列表非空但仍有错误时，用一条紧凑提示保留错误信号，避免错误被静默吞掉
+              if (viewModel.error != null && viewModel.channels.isNotEmpty)
+                _buildInlineError(viewModel.error!),
               Expanded(
                 child: _buildChannelContainer(viewModel, filteredChannels),
               ),
@@ -108,6 +111,22 @@ class _ChannelListScreenState extends State<ChannelListScreen> {
           ),
         );
       },
+    );
+  }
+
+  /// 顶部的非阻断式错误提示条（仅使用既有 Material 组件，无新增依赖）。
+  Widget _buildInlineError(String message) {
+    final colorScheme = Theme.of(context).colorScheme;
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      color: colorScheme.error.withValues(alpha: 0.12),
+      child: Text(
+        message,
+        maxLines: 2,
+        overflow: TextOverflow.ellipsis,
+        style: TextStyle(fontSize: 12, color: colorScheme.error),
+      ),
     );
   }
 
@@ -165,7 +184,10 @@ class _ChannelListScreenState extends State<ChannelListScreen> {
 
   Widget _buildChannelContainer(ChannelViewModel viewModel, List<Channel> channels) {
     if (viewModel.isLoading) return const Center(child: CircularProgressIndicator());
-    if (viewModel.error != null) return Center(child: Text(viewModel.error!, style: const TextStyle(color: Colors.red)));
+    // 仅在没有任何可展示内容时才全屏报错；已有列表时继续渲染，交由顶部提示呈现错误
+    if (viewModel.error != null && viewModel.channels.isEmpty) {
+      return Center(child: Text(viewModel.error!, style: const TextStyle(color: Colors.red)));
+    }
     if (channels.isEmpty) return const Center(child: Text('No channels found'));
 
     if (_isGridView) {
