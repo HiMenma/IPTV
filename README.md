@@ -5,9 +5,8 @@ A Flutter-based IPTV player focused on stability, UI customization, and reliable
 ## Features
 
 - Multi-source support: M3U network URLs, local M3U files, and Xtream Codes API
-- Playback watchdog with automatic reconnection on stalls or token expiry
+- Playback watchdog with automatic reconnection on stalls
 - Platform-optimized rendering for macOS and Android
-- Glassmorphism UI with smooth animations
 - SQLite schema auto-migration to prevent crashes after updates
 - Manual Light/Dark/System theme toggle
 
