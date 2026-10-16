@@ -219,3 +219,13 @@ firebase_options.dart
 
 dist/
 debug/
+
+# Security: never track signing material (overrides the negations above)
+*.keystore
+*.jks
+*.keystore.base64
+android/key.properties
+key.properties
+
+# Agent workspace data
+.workbuddy/
