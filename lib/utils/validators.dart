@@ -1,14 +1,9 @@
 /// Input validation utilities for IPTV Player
-/// Validates configuration names, URLs, and credentials
 
 class Validators {
-  // Configuration name constraints
   static const int minNameLength = 1;
   static const int maxNameLength = 100;
 
-  /// Validate configuration name
-  /// Returns null if valid, error message if invalid
-  /// Requirements: 4.1
   static String? validateConfigurationName(String? name) {
     if (name == null || name.trim().isEmpty) {
       return 'Configuration name cannot be empty';
@@ -27,9 +22,6 @@ class Validators {
     return null;
   }
 
-  /// Validate URL format
-  /// Returns null if valid, error message if invalid
-  /// Requirements: 3.3, 3.4
   static String? validateUrl(String? url) {
     if (url == null || url.trim().isEmpty) {
       return 'URL cannot be empty';
@@ -69,16 +61,10 @@ class Validators {
     }
   }
 
-  /// Validate Xtream server URL
-  /// Returns null if valid, error message if invalid
-  /// Requirements: 2.1
   static String? validateXtreamServerUrl(String? serverUrl) {
     return validateUrl(serverUrl);
   }
 
-  /// Validate Xtream username
-  /// Returns null if valid, error message if invalid
-  /// Requirements: 2.1
   static String? validateXtreamUsername(String? username) {
     if (username == null || username.trim().isEmpty) {
       return 'Username is required';
@@ -87,9 +73,6 @@ class Validators {
     return null;
   }
 
-  /// Validate Xtream password
-  /// Returns null if valid, error message if invalid
-  /// Requirements: 2.1
   static String? validateXtreamPassword(String? password) {
     if (password == null || password.trim().isEmpty) {
       return 'Password is required';
@@ -98,10 +81,6 @@ class Validators {
     return null;
   }
 
-  /// Validate all Xtream credentials at once
-  /// Returns a map of field names to error messages
-  /// Empty map means all fields are valid
-  /// Requirements: 2.1
   static Map<String, String> validateXtreamCredentials({
     String? serverUrl,
     String? username,
@@ -137,9 +116,6 @@ class Validators {
     return null;
   }
 
-  /// Validate M3U network URL
-  /// Returns null if valid, error message if invalid
-  /// Requirements: 3.3, 3.4
   static String? validateM3UNetworkUrl(String? url) {
     final urlError = validateUrl(url);
     if (urlError != null) {

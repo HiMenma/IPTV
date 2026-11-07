@@ -1,7 +1,10 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'database/database_helper.dart';
 import 'providers/theme_provider.dart';
+import 'services/xtream_service.dart';
+import 'services/m3u_service.dart';
 import 'viewmodels/configuration_viewmodel.dart';
 import 'viewmodels/channel_viewmodel.dart';
 import 'viewmodels/player_viewmodel.dart';
@@ -11,27 +14,59 @@ import 'views/screens/history_screen.dart';
 import 'utils/app_logger.dart';
 
 void main() async {
-  WidgetsFlutterBinding.ensureInitialized();
-  
-  // Initialize logger
-  await AppLogger.init();
-  
-  // Initialize database factory for Web/Desktop platforms
-  DatabaseHelper.initPlatformFactory();
-  
-  runApp(const MyApp());
+  // 全局兜底：未捕获的异步异常与框架错误全部落到日志文件，避免静默崩溃
+  FlutterError.onError = (FlutterErrorDetails details) {
+    FlutterError.presentError(details);
+    AppLogger.log(
+        'FlutterError: ${details.exception}\n${details.stack ?? 'no stack'}');
+  };
+
+  runZonedGuarded<Future<void>>(() async {
+    WidgetsFlutterBinding.ensureInitialized();
+
+    // Initialize logger
+    await AppLogger.init();
+
+    // Initialize database factory for Web/Desktop platforms
+    DatabaseHelper.initPlatformFactory();
+
+    runApp(const MyApp());
+  }, (Object error, StackTrace stack) {
+    AppLogger.log('UncaughtError: $error\n$stack');
+  });
 }
 
-class MyApp extends StatelessWidget {
+class MyApp extends StatefulWidget {
   const MyApp({super.key});
+
+  @override
+  State<MyApp> createState() => _MyAppState();
+}
+
+class _MyAppState extends State<MyApp> {
+  // XtreamService / M3UService 实例在多个 ViewModel 间共享，
+  // 否则「刷新配置」清掉的只是 ConfigurationViewModel 自己那份副本缓存。
+  // 放在 State 中保证 rebuild 时不会重复创建，缓存才能真正被共享与清除。
+  final XtreamService _xtreamService = XtreamService();
+  final M3UService _m3uService = M3UService();
 
   @override
   Widget build(BuildContext context) {
     return MultiProvider(
       providers: [
         ChangeNotifierProvider(create: (_) => ThemeProvider()),
-        ChangeNotifierProvider(create: (_) => ConfigurationViewModel()),
-        ChangeNotifierProvider(create: (_) => ChannelViewModel()),
+        ChangeNotifierProvider(
+          create: (_) => ConfigurationViewModel(
+            xtreamService: _xtreamService,
+            m3uService: _m3uService,
+          ),
+        ),
+        ChangeNotifierProvider(
+          create: (_) => ChannelViewModel(
+            xtreamService: _xtreamService,
+            m3uService: _m3uService,
+          ),
+        ),
         ChangeNotifierProvider(create: (_) => PlayerViewModel()),
       ],
       child: Consumer<ThemeProvider>(

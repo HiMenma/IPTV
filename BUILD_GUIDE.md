@@ -65,7 +65,26 @@ flutter build appbundle --release
 
 #### 签名说明
 
-项目已配置签名密钥（`release.keystore`），打包时会自动签名。如需修改签名配置，编辑 `android/app/build.gradle.kts` 文件。
+仓库**不包含**签名密钥（`*.keystore` / `*.jks` 已加入 `.gitignore`）。release 包的签名通过以下两种方式之一提供：
+
+**方式一：本地构建 —— 提供 `android/key.properties`**
+
+在 `android/` 目录下创建 `key.properties`（该文件不会被提交）：
+
+```properties
+storePassword=<keystore 密码>
+keyPassword=<key 密码>
+keyAlias=<key 别名>
+storeFile=<keystore 路径，如 ../release.keystore 或绝对路径>
+```
+
+`build.gradle.kts` 启动时会自动读取该文件并创建 `release` 签名配置。若文件不存在，release 构建会**回退到 debug 签名**，并在构建日志中打印警告 —— 这样的包无法用于分发。
+
+**方式二：CI 构建 —— 使用仓库 Secrets**
+
+推送 `v*` 标签触发 `.github/workflows/build-release.yml`，工作流通过 `KEYSTORE_FILE`（base64编码的 keystore）、`KEYSTORE_PASSWORD`、`KEY_ALIAS`、`KEY_PASSWORD` 四个 Secret 注入签名参数。
+
+> 注意：历史版本曾把 `release.keystore` 提交进 git。若该密钥曾用于发布，请在 Google Play Console **轮换（rotate）上传密钥**。
 
 ### 🍎 iOS 打包
 
@@ -349,6 +368,46 @@ flutter build apk --release
 - 清理 iOS Pods：`cd ios && rm -rf Pods Podfile.lock && pod install && cd ..`
 - 清理 macOS Pods：`cd macos && rm -rf Pods Podfile.lock && pod install && cd ..`
 - 如果遇到 "CocoaPods not installed" 错误，确保已安装 CocoaPods 并重新运行 `pod install`
+
+### 4b. macOS 报错 "deployment target is set to 10.15, but the range of supported deployment target versions is 12.0 to 27.0.x"
+
+**原因**：本机 Xcode 已升级到 27.x，不再支持 12.0 以下的部署目标，而工程历史模板写的是 10.15。
+
+**解决方案**（2026-10-14 已按此修复并验证）：
+1. `macos/Podfile`：`platform :osx, '10.15'` → `'12.0'`
+2. `macos/Runner.xcodeproj/project.pbxproj`：三处 `MACOSX_DEPLOYMENT_TARGET = 10.15` → `12.0`
+3. `macos/Podfile` 的 `post_install` 中强制抬升所有 pod 目标（podspec 各自声明 10.13/10.14，Podfile 平台版本不会自动抬升它们）：
+
+```ruby
+post_install do |installer|
+  installer.pods_project.targets.each do |target|
+    flutter_additional_macos_build_settings(target)
+    target.build_configurations.each do |config|
+      config.build_settings['MACOSX_DEPLOYMENT_TARGET'] = '12.0'
+    end
+  end
+end
+```
+
+4. `cd macos && rm -rf Pods Podfile.lock && pod install`
+4. 若再报 `FlutterMacOS.framework ... does not contain architectures "arm64 x86_64"`，且 `lipo -info` 明明显示两个架构都在——**这不是陈旧产物问题，删 `build/` 无效**，而是 Flutter 3.38.4 工具链与 Xcode 27 的兼容 bug（2026-10-14 已定位并修复，见下）
+
+> 影响：部署目标 12.0 意味着包只能跑在 macOS Monterey (12) 及以上，旧系统用户无法运行。
+
+### 4c. macOS 报错 `Binary .../FlutterMacOS does not contain architectures "arm64 x86_64"`（但 lipo -info 显示两个架构都在）
+
+**根因（2026-10-14 定位）**：Flutter 3.38.4 的 `thinFramework()` 把两个架构一起传给一条命令：
+`lipo <bin> -verify_arch arm64 x86_64`。Xcode 27 的 `lipo` 对 `-verify_arch` 只接受一个架构，报
+`lipo: -verify_arch requires exactly one input file`，Flutter 将其包装成误导性的
+"does not contain architectures" 错误。手动 `lipo <bin> -verify_arch arm64`（单个）实测 exit=0，
+二进制本身没有问题。
+
+**修复方式**：已对本机 Flutter SDK 打补丁（`packages/flutter_tools/lib/src/build_system/targets/darwin.dart` 的
+`thinFramework`，把多架构验证改为逐架构循环验证；原文件备份为同目录 `darwin.dart.bak-20261014`），
+并删除 `bin/cache/flutter_tools.snapshot` 与 `.stamp` 强制快照重建（补丁改的是工作区文件，
+SDK 的 git HEAD 未变，不会自动触发重建）。
+
+> ⚠️ **执行 `flutter upgrade` 或重装 SDK 后需重新打这个补丁**，否则 macOS release 构建会再次失败。
 
 ### 5. 构建体积过大
 

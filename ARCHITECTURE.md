@@ -1,10 +1,10 @@
-# 🏗️ IPTV Player 技术架构文档
+# IPTV Player 技术架构
 
-本文档旨在帮助开发者理解项目的分层结构、核心逻辑流及关键文件职责。
+本文档描述项目的分层结构、核心逻辑流及关键文件职责。
 
 ---
 
-## 1. 目录结构地图 (Project Map)
+## 1. 目录结构
 
 ```text
 .
@@ -32,7 +32,8 @@
 ---
 
 ## 2. 整体设计模式
-项目采用 **MVVM (Model-View-ViewModel)** 架构，结合 **Service/Repository** 模式，确保 UI、业务逻辑与数据存储解耦。
+
+项目采用 **MVVM** 架构，结合 **Service/Repository** 模式，确保 UI、业务逻辑与数据存储解耦。
 
 *   **View**: Flutter Widgets，仅负责 UI 渲染。
 *   **ViewModel**: 状态管理（Provider），驱动 UI 更新并持有业务状态。
@@ -43,30 +44,29 @@
 
 ## 3. 核心文件索引
 
-### 📁 `lib/services/` (功能引擎)
-*   **`player_service.dart`**: **[关键]** 播放器底层封装。直接操作 `video_player` 和 `chewie`，管理硬件锁 (Wakelock) 和渲染 Texture 生命周期。
-*   **`m3u_service.dart`**: 高性能 M3U 文件解析引擎，包含对海量频道的正则表达式优化。
+### lib/services/ (功能引擎)
+*   **player_service.dart**: 播放器底层封装。直接操作 `video_player` 和 `chewie`，管理硬件锁 (Wakelock) 和渲染 Texture 生命周期。
+*   **m3u_service.dart**: 高性能 M3U 文件解析引擎，包含对海量频道的正则表达式优化。
 
-### 📁 `lib/viewmodels/` (大脑)
-*   **`player_viewmodel.dart`**: 控制播放状态机。处理自动重试（Watchdog）、错误捕获及 UI 状态分发。
+### lib/viewmodels/ (状态管理)
+*   **player_viewmodel.dart**: 控制播放状态机。处理自动重试（Watchdog）、错误捕获及 UI 状态分发。
 
-### 📁 `lib/database/` (骨架)
-*   **`database_helper.dart`**: SQLite 数据库管理。包含版本升级 (Migration) 和**自愈逻辑 (Self-healing)**。
+### lib/database/ (数据层)
+*   **database_helper.dart**: SQLite 数据库管理。包含版本升级 (Migration) 和 schema 自动修复。
 
 ---
 
 ## 4. 核心业务流程
 
-### 播放自愈流程 (Playback Watchdog)
-1.  `PlayerService` 监听流状态 -> 发现停顿 (Stall) 超过 15 秒。
-2.  抛出 `Playback stalled` 错误。
-3.  `PlayerViewModel` 捕获异常 -> UI 显示“自动连接中...”提示。
-4.  自动执行 `PlayerService.play()` 重新拉流。
+### 播放自动重连 (Playback Watchdog)
+1. `PlayerService` 监听流状态 -> 发现停顿 (Stall) 超过 15 秒
+2. 抛出 `Playback stalled` 错误
+3. `PlayerViewModel` 捕获异常 -> UI 显示"自动连接中..."提示
+4. 自动执行 `PlayerService.play()` 重新拉流
 
-### 数据库自愈流程 (DB Self-healing)
-1.  App 启动，执行 `PRAGMA table_info` 扫描表结构。
-2.  如果发现缺少新增字段（如 `order_index`），动态执行 `ALTER TABLE` 补齐。
+### 数据库 Schema 修复 (DB Migration)
+1. App 启动，执行 `PRAGMA table_info` 扫描表结构
+2. 如果发现缺少新增字段（如 `order_index`），动态执行 `ALTER TABLE` 补齐
 
 ---
 **Last Updated**: 2026-03-07
-**Team**: Gemini OmG Team

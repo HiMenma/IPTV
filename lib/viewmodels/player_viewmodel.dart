@@ -6,16 +6,13 @@ import '../models/configuration.dart';
 import '../services/player_service.dart';
 import '../repositories/history_repository_sqlite.dart';
 import '../repositories/configuration_repository.dart';
-import '../services/xtream_service.dart';
-import '../services/m3u_service.dart';
 import '../utils/app_logger.dart';
+import '../utils/log_redactor.dart';
 
 class PlayerViewModel extends ChangeNotifier {
   final PlayerService _playerService;
   final HistoryRepositorySQLite _historyRepository;
   final ConfigurationRepository _configRepository;
-  final XtreamService _xtreamService = XtreamService();
-  final M3UService _m3uService = M3UService();
 
   PlayerState _state = PlayerState.idle;
   String? _error;
@@ -66,20 +63,22 @@ class PlayerViewModel extends ChangeNotifier {
   }
 
   void _handlePlaybackError(String message) {
-    AppLogger.log('PlayerVM: Error received: $message. Current retry: $_retryCount');
-    
+    // 播放器异常文本可能内嵌含凭证的播放地址，入日志前统一脱敏
+    final safeMessage = redactUrl(message);
+    AppLogger.log('PlayerVM: Error received: $safeMessage. Current retry: $_retryCount');
+
     if (_retryCount < _maxRetries && _currentChannel != null) {
       _retryCount++;
       _error = 'Connection error. Retrying ($_retryCount/$_maxRetries)...';
       notifyListeners();
-      
+
       _reconnectTimer?.cancel();
       // Wait slightly longer (3s) to allow system to clear video buffers
       _reconnectTimer = Timer(const Duration(seconds: 3), () {
         _performReconnect();
       });
     } else {
-      _error = message;
+      _error = safeMessage;
       _state = PlayerState.error;
       notifyListeners();
     }
@@ -99,7 +98,6 @@ class PlayerViewModel extends ChangeNotifier {
         if (config != null) {
           if (config.type == ConfigType.xtream) {
             // Re-fetch Xtream URL to get fresh token if needed
-            // This is a simplified version; real-world might need deeper API call
             AppLogger.log('PlayerVM: Refreshing Xtream config for fresh tokens');
           }
         }
@@ -115,6 +113,10 @@ class PlayerViewModel extends ChangeNotifier {
   }
 
   Future<void> playChannel(Channel channel) async {
+    // 取消待执行的自动重连，避免手动切换频道时与 3 秒重连定时器并发播放
+    _reconnectTimer?.cancel();
+    _reconnectTimer = null;
+
     try {
       _currentChannel = channel;
       _error = null;
@@ -126,12 +128,19 @@ class PlayerViewModel extends ChangeNotifier {
       }
 
       await _playerService.play(channel.streamUrl);
-      await _historyRepository.add(channel.id);
     } catch (e) {
-      _error = 'Failed to play channel: $e';
+      // 该文案会显示在错误遮罩上，脱敏避免向用户暴露自己的账号密码
+      _error = 'Failed to play channel: ${redactUrl(e.toString())}';
       _state = PlayerState.error;
       notifyListeners();
       rethrow;
+    }
+
+    // 历史记录写入与播放状态解耦：DB 失败不应把正在播放的画面变成错误遮罩
+    try {
+      await _historyRepository.add(channel.id);
+    } catch (e) {
+      AppLogger.log('PlayerVM: history write failed: $e');
     }
   }
 

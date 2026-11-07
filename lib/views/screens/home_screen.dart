@@ -114,7 +114,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 onTap: () => _navigateToChannelList(context, config),
                 onEdit: () => _navigateToEditConfiguration(context, config),
                 onDelete: () => _deleteConfiguration(context, config),
-                onRefresh: () => _refreshConfiguration(context, config),
+                onRefresh: () => _refreshConfiguration(context, config.id),
               );
             },
           );
@@ -178,12 +178,12 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
-  Future<void> _refreshConfiguration(
-      BuildContext context, Configuration config) async {
-    await context.read<ConfigurationViewModel>().refreshConfiguration(config.id);
+  /// 清除该配置的本地缓存（DB + Service 内存缓存），下次进入频道页时重新加载。
+  Future<void> _refreshConfiguration(BuildContext context, String configId) async {
+    await context.read<ConfigurationViewModel>().refreshConfiguration(configId);
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Refreshed ${config.name}')),
+        const SnackBar(content: Text('已清除缓存，下次打开将重新加载')),
       );
     }
   }

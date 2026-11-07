@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../services/player_service.dart';
 
-/// A reusable widget for displaying video player controls.
 class PlayerControls extends StatelessWidget {
   final PlayerState playerState;
   final bool isFullscreen;

@@ -1,13 +1,12 @@
 import 'package:flutter/foundation.dart';
 import '../models/channel.dart';
-import '../models/favorite.dart';
-import '../models/browse_history.dart';
 import '../repositories/favorite_repository_sqlite.dart';
 import '../repositories/history_repository_sqlite.dart';
 import '../repositories/configuration_repository.dart';
 import '../repositories/channel_cache_repository_sqlite.dart';
 import '../services/xtream_service.dart';
 import '../services/m3u_service.dart';
+import '../utils/log_redactor.dart';
 import '../models/configuration.dart';
 
 class ChannelViewModel extends ChangeNotifier {
@@ -45,8 +44,6 @@ class ChannelViewModel extends ChangeNotifier {
   bool get isLoading => _isLoading;
   String? get error => _error;
 
-  /// Load channels from a specific configuration
-  /// Uses cache if available, otherwise loads from source
   Future<void> loadChannels(String configId, {bool forceRefresh = false}) async {
     _isLoading = true;
     _error = null;
@@ -87,17 +84,26 @@ class ChannelViewModel extends ChangeNotifier {
             username,
             password,
             config.id,
+            forceRefresh: forceRefresh,
           );
           break;
 
         case ConfigType.m3uNetwork:
           final url = config.credentials['url'] as String;
-          _channels = await _m3uService.parseNetworkFile(url, config.id);
+          _channels = await _m3uService.parseNetworkFile(
+            url,
+            config.id,
+            forceRefresh: forceRefresh,
+          );
           break;
 
         case ConfigType.m3uLocal:
           final filePath = config.credentials['filePath'] as String;
-          _channels = await _m3uService.parseLocalFile(filePath, config.id);
+          _channels = await _m3uService.parseLocalFile(
+            filePath,
+            config.id,
+            forceRefresh: forceRefresh,
+          );
           break;
 
         case ConfigType.directLink:
@@ -121,16 +127,15 @@ class ChannelViewModel extends ChangeNotifier {
       // Load favorite IDs for quick lookup
       await _loadFavoriteIds();
     } catch (e) {
-      _error = 'Failed to load channels: $e';
-      _channels = [];
-      debugPrint('Error loading channels: $e');
+      // 加载失败时保留用户已看到的旧列表，避免一次网络抖动就清空界面
+      _error = 'Failed to load channels: ${redactUrl(e.toString())}';
+      debugPrint('Error loading channels: ${redactUrl(e.toString())}');
     } finally {
       _isLoading = false;
       notifyListeners();
     }
   }
 
-  /// Load favorite IDs into memory for quick lookup
   Future<void> _loadFavoriteIds() async {
     try {
       final favoriteRecords = await _favoriteRepository.getAll();
@@ -140,7 +145,6 @@ class ChannelViewModel extends ChangeNotifier {
     }
   }
 
-  /// Load favorite channels
   Future<void> loadFavorites() async {
     _isLoading = true;
     _error = null;
@@ -169,7 +173,6 @@ class ChannelViewModel extends ChangeNotifier {
     }
   }
 
-  /// Load browse history
   Future<void> loadHistory() async {
     _isLoading = true;
     _error = null;
@@ -207,12 +210,10 @@ class ChannelViewModel extends ChangeNotifier {
   }
 
 
-  /// Check if a channel is favorited (synchronous, uses cached data)
   bool isFavorite(String channelId) {
     return _favoriteIds.contains(channelId);
   }
 
-  /// Toggle favorite status of a channel
   Future<void> toggleFavorite(String channelId) async {
     try {
       final wasFavorite = _favoriteIds.contains(channelId);
@@ -241,7 +242,6 @@ class ChannelViewModel extends ChangeNotifier {
     }
   }
 
-  /// Clear all browse history
   Future<void> clearHistory() async {
     try {
       await _historyRepository.clear();

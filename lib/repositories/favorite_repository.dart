@@ -6,8 +6,6 @@ class FavoriteRepository {
   static const String _storageKey = 'favorites';
   static const String _backupKey = 'favorites_backup';
 
-  /// Get all favorites from storage
-  /// Requirements: 6.3
   Future<List<Favorite>> getAll() async {
     try {
       final prefs = await SharedPreferences.getInstance();
@@ -95,8 +93,6 @@ class FavoriteRepository {
     await _saveAll(favorites);
   }
 
-  /// Save all favorites to storage with backup
-  /// Requirements: 6.3
   Future<void> _saveAll(List<Favorite> favorites) async {
     try {
       final prefs = await SharedPreferences.getInstance();

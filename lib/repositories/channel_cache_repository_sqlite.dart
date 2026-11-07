@@ -2,11 +2,9 @@ import 'package:sqflite/sqflite.dart';
 import '../models/channel.dart';
 import '../database/database_helper.dart';
 
-/// SQLite-based repository for caching channel data
 class ChannelCacheRepositorySQLite {
   final DatabaseHelper _dbHelper = DatabaseHelper.instance;
 
-  /// Save channels to cache for a specific configuration
   Future<void> saveChannels(String configId, List<Channel> channels) async {
     try {
       final db = await _dbHelper.database;
@@ -45,7 +43,6 @@ class ChannelCacheRepositorySQLite {
     }
   }
 
-  /// Load channels from cache for a specific configuration
   Future<List<Channel>?> loadChannels(String configId) async {
     try {
       final db = await _dbHelper.database;
@@ -77,7 +74,6 @@ class ChannelCacheRepositorySQLite {
     }
   }
 
-  /// Check if cache exists for a configuration
   Future<bool> hasCache(String configId) async {
     try {
       final db = await _dbHelper.database;
@@ -92,7 +88,6 @@ class ChannelCacheRepositorySQLite {
     }
   }
 
-  /// Get the timestamp when channels were last cached
   Future<DateTime?> getCacheTimestamp(String configId) async {
     try {
       final db = await _dbHelper.database;
@@ -113,7 +108,6 @@ class ChannelCacheRepositorySQLite {
     }
   }
 
-  /// Clear cache for a specific configuration
   Future<void> clearCache(String configId) async {
     try {
       final db = await _dbHelper.database;
@@ -129,7 +123,6 @@ class ChannelCacheRepositorySQLite {
     }
   }
 
-  /// Clear all channel caches
   Future<void> clearAllCaches() async {
     try {
       final db = await _dbHelper.database;
@@ -141,7 +134,6 @@ class ChannelCacheRepositorySQLite {
     }
   }
 
-  /// Get multiple channels by their IDs across all configurations
   Future<List<Channel>> getChannelsByIds(List<String> channelIds) async {
     if (channelIds.isEmpty) return [];
     
@@ -183,7 +175,6 @@ class ChannelCacheRepositorySQLite {
     }
   }
 
-  /// Get cache info for debugging
   Future<Map<String, dynamic>> getCacheInfo(String configId) async {
     try {
       final hasCache = await this.hasCache(configId);
@@ -203,7 +194,6 @@ class ChannelCacheRepositorySQLite {
     }
   }
 
-  /// Get total number of cached channels
   Future<int> getTotalCachedChannels() async {
     try {
       final db = await _dbHelper.database;
@@ -215,7 +205,6 @@ class ChannelCacheRepositorySQLite {
     }
   }
 
-  /// Get list of all cached config IDs
   Future<List<String>> getCachedConfigIds() async {
     try {
       final db = await _dbHelper.database;

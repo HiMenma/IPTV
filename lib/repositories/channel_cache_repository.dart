@@ -2,13 +2,10 @@ import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/channel.dart';
 
-/// Repository for caching channel data locally
-/// Channels are cached permanently until manually refreshed
 class ChannelCacheRepository {
   static const String _prefix = 'channels_cache_';
   static const String _timestampPrefix = 'channels_timestamp_';
 
-  /// Save channels to cache for a specific configuration
   Future<void> saveChannels(String configId, List<Channel> channels) async {
     try {
       final prefs = await SharedPreferences.getInstance();
@@ -33,8 +30,6 @@ class ChannelCacheRepository {
     }
   }
 
-  /// Load channels from cache for a specific configuration
-  /// Returns null if no cache exists
   Future<List<Channel>?> loadChannels(String configId) async {
     try {
       final prefs = await SharedPreferences.getInstance();
@@ -60,7 +55,6 @@ class ChannelCacheRepository {
     }
   }
 
-  /// Check if cache exists for a configuration
   Future<bool> hasCache(String configId) async {
     try {
       final prefs = await SharedPreferences.getInstance();
@@ -70,7 +64,6 @@ class ChannelCacheRepository {
     }
   }
 
-  /// Get the timestamp when channels were last cached
   Future<DateTime?> getCacheTimestamp(String configId) async {
     try {
       final prefs = await SharedPreferences.getInstance();
@@ -84,7 +77,6 @@ class ChannelCacheRepository {
     }
   }
 
-  /// Clear cache for a specific configuration
   Future<void> clearCache(String configId) async {
     try {
       final prefs = await SharedPreferences.getInstance();
@@ -96,7 +88,6 @@ class ChannelCacheRepository {
     }
   }
 
-  /// Clear all channel caches
   Future<void> clearAllCaches() async {
     try {
       final prefs = await SharedPreferences.getInstance();
@@ -114,7 +105,6 @@ class ChannelCacheRepository {
     }
   }
 
-  /// Get cache info for debugging
   Future<Map<String, dynamic>> getCacheInfo(String configId) async {
     try {
       final hasCache = await this.hasCache(configId);

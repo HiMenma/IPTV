@@ -4,8 +4,8 @@ import 'package:flutter/foundation.dart';
 import 'package:uuid/uuid.dart';
 import '../models/channel.dart';
 import '../utils/error_handler.dart';
+import '../utils/app_logger.dart';
 
-/// Helper class for isolate parsing
 class _M3UParseParams {
   final String content;
   final String configId;
@@ -14,7 +14,6 @@ class _M3UParseParams {
 
 class M3UService {
   final Dio _dio;
-  final Uuid _uuid;
   
   // Pre-compiled RegEx patterns for performance
   static final _logoRegExp = RegExp(r'tvg-logo="([^"]*)"', caseSensitive: false);
@@ -27,11 +26,11 @@ class M3UService {
   // Cache duration: 5 minutes
   static const Duration _cacheDuration = Duration(minutes: 5);
 
+  // [uuid] 保留以兼容既有调用方；实际解析在 isolate 内使用固定的 UUID v5
+  // namespace（见 _parseM3UIsolate），因此无需在实例上持有实例字段。
   M3UService({Dio? dio, Uuid? uuid})
-      : _dio = dio ?? Dio(),
-        _uuid = uuid ?? const Uuid();
+      : _dio = dio ?? Dio();
 
-  /// Parse a local M3U/M3U8 file and extract channels
   Future<List<Channel>> parseLocalFile(String filePath, String configId, {bool forceRefresh = false}) async {
     final cacheKey = 'local:$filePath:$configId';
     if (!forceRefresh && _isCacheValid(cacheKey)) {
@@ -51,12 +50,12 @@ class M3UService {
       _updateCache(cacheKey, channels);
       return channels;
     } catch (e) {
-      debugPrint('Error parsing local M3U: $e');
+      // 文件路径可能包含用户目录信息，日志中仅保留异常类型
+      AppLogger.log('M3U: local parse failed: ${e.runtimeType}');
       rethrow;
     }
   }
 
-  /// Fetch and parse a remote M3U/M3U8 file
   Future<List<Channel>> parseNetworkFile(String url, String configId, {bool forceRefresh = false}) async {
     final cacheKey = 'network:$url:$configId';
     if (!forceRefresh && _isCacheValid(cacheKey)) {
@@ -80,7 +79,6 @@ class M3UService {
     });
   }
 
-  /// Top-level function for compute()
   static List<Channel> _parseM3UIsolate(_M3UParseParams params) {
     const uuid = Uuid();
     // Namespace for UUID v5 generation (random but constant)
@@ -132,7 +130,6 @@ class M3UService {
   }
 
 
-  /// Export a list of channels to M3U format
   String exportToM3U(List<Channel> channels) {
     final buffer = StringBuffer();
     buffer.writeln('#EXTM3U');
@@ -164,12 +161,10 @@ class M3UService {
     return buffer.toString();
   }
 
-  /// Escape special characters in attribute values
   String _escapeAttribute(String value) {
     return value.replaceAll('"', '&quot;').replaceAll('\n', ' ').replaceAll('\r', '');
   }
   
-  /// Check if cache is valid for a given key
   bool _isCacheValid(String key) {
     if (!_cache.containsKey(key)) {
       return false;
@@ -184,19 +179,16 @@ class M3UService {
     return now.difference(timestamp) < _cacheDuration;
   }
   
-  /// Update cache with new data
   void _updateCache(String key, List<Channel> channels) {
     _cache[key] = channels;
     _cacheTimestamps[key] = DateTime.now();
   }
   
-  /// Clear cache for a specific key
   void clearCache(String key) {
     _cache.remove(key);
     _cacheTimestamps.remove(key);
   }
   
-  /// Clear all cache
   void clearAllCache() {
     _cache.clear();
     _cacheTimestamps.clear();
